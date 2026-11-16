@@ -22,6 +22,13 @@ for png in "$SET"/*.png; do
   echo "  $(basename "$png") ${w}px"
 done
 
+echo "== Срок тестовых профилей подписи"
+# Профили в build-system/fake-codesigning истекли 30.10.2026, а их сертификат действует до 2030.
+# Приложение всё равно переподписывается в KSign, поэтому проверка срока профиля отключена.
+PT=build-system/bazel-rules/rules_apple/tools/plisttool/plisttool.py
+perl -pi -e 's/if expire and expire < datetime\.datetime\.now\(\):/if False and expire and expire < datetime.datetime.now():/' "$PT"
+grep -n "if False and expire" "$PT"
+
 echo "== Хранилище без App Group"
 # После переподписи в KSign группа приложений обычно недоступна, и Telegram показывает «Error 2».
 # Если группы нет, данные хранятся в папке Documents самого приложения.
