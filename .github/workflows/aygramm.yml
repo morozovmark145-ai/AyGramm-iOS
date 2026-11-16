@@ -67,9 +67,8 @@ jobs:
             --configuration=release_arm64 \
             --buildNumber="${{ github.run_number }}00"
           mkdir -p "$GITHUB_WORKSPACE/out"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" "$GITHUB_WORKSPACE/out/AyGramm.ipa"
-          done
+          # Bazel кладёт готовый файл по ссылке bazel-bin/Telegram/Telegram.ipa.
+          cp -L bazel-bin/Telegram/Telegram.ipa "$GITHUB_WORKSPACE/out/AyGramm.ipa"
           ls -la "$GITHUB_WORKSPACE/out"
 
       - uses: actions/upload-artifact@v4
