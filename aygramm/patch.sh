@@ -36,3 +36,27 @@ DELEGATE=submodules/TelegramUI/Sources/AppDelegate.swift
 perl -pi -e 's#(let maybeAppGroupUrl = FileManager\.default\.containerURL\(forSecurityApplicationGroupIdentifier: appGroupName\))$#$1 ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first#' "$DELEGATE"
 grep -n "let maybeAppGroupUrl" "$DELEGATE"
 grep -q "documentDirectory" <(grep -n "let maybeAppGroupUrl" "$DELEGATE")
+
+echo "== Режим призрака"
+# Включён, пока в UserDefaults нет ключа AyGrammGhostMode = false.
+# Сервер не получает: статус «в сети», отметки о прочтении, «печатает…», просмотры историй.
+GHOST='(UserDefaults.standard.object(forKey: "AyGrammGhostMode") as? Bool ?? true)'
+export GHOST
+S=submodules/TelegramCore/Sources/State
+
+# Статус: вместо «в сети» всегда отправляется «не в сети».
+perl -pi -e 's/updateStatus\(offline: \.boolFalse\)/updateStatus(offline: $ENV{GHOST} ? .boolTrue : .boolFalse)/' $S/ManagedAccountPresence.swift
+test "$(grep -c 'AyGrammGhostMode' $S/ManagedAccountPresence.swift)" = 1
+
+# «Печатает…»: запрос не отправляется.
+perl -pi -e 's/^(\s*)(return network\.request\(Api\.functions\.messages\.(setTyping|setEncryptedTyping)\()/$1if $ENV{GHOST} { return .complete() }\n$1$2/' $S/ManagedLocalInputActivities.swift
+test "$(grep -c 'AyGrammGhostMode' $S/ManagedLocalInputActivities.swift)" = 2
+
+# Прочтение: состояние считается отправленным, но запрос на сервер не уходит.
+perl -pi -e 's/^(\s*)((?:var pushSignal: Signal<Void, NoError> = |return )network\.request\(Api\.functions\.(?:channels\.readHistory|messages\.readHistory|messages\.readEncryptedHistory)\()/$1if $ENV{GHOST} { return .single(readState) }\n$1$2/' $S/SynchronizePeerReadState.swift
+test "$(grep -c 'AyGrammGhostMode' $S/SynchronizePeerReadState.swift)" = 3
+
+# Истории: просмотр не отправляется.
+perl -pi -e 's/^(\s*)(return network\.request\(Api\.functions\.stories\.readStories\()/$1if $ENV{GHOST} { return .complete() }\n$1$2/' $S/ManagedSynchronizeViewStoriesOperations.swift
+test "$(grep -c 'AyGrammGhostMode' $S/ManagedSynchronizeViewStoriesOperations.swift)" = 1
+grep -rn "AyGrammGhostMode" $S | cut -c1-160
