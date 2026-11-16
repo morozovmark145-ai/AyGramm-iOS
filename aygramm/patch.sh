@@ -94,3 +94,10 @@ CD=submodules/CloudData/Sources/CloudData.swift
 perl -pi -e 's/^(\s*)(let container = CKContainer\.default\(\))$/$1if Bundle.main.object(forInfoDictionaryKey: "AyGrammCloudKit") == nil {\n$1    subscriber.putError(.generic)\n$1    return EmptyDisposable\n$1}\n$1$2/' "$CD"
 grep -n -B5 "CKContainer.default" "$CD"
 test "$(grep -c 'AyGrammCloudKit' "$CD")" = 1
+
+echo "== Канал AyGramm в настройках"
+# Первый пункт в разделе поддержки открывает канал @augrammipa внутри приложения.
+SI=submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+perl -pi -e 's/^(\s*)(items\[\.support\]!\.append\(PeerInfoScreenDisclosureItem\(id: 0, text: presentationData\.strings\.Settings_Support,)/$1items[.support]!.append(PeerInfoScreenDisclosureItem(id: 100, text: "Канал AyGramm", icon: PresentationResourcesSettings.faq, action: {\n$1    interaction.openPeerMention("augrammipa", .default)\n$1}))\n$1$2/' "$SI"
+grep -n -A3 '"Канал AyGramm"' "$SI"
+test "$(grep -c 'augrammipa' "$SI")" = 1
