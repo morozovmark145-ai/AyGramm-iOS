@@ -37,20 +37,12 @@ jobs:
           test -n "$API_ID" && test -n "$API_HASH"
           python3 - <<'EOF'
           import json, os
-          cfg = {
-              "bundle_id": "ph.telegra.Telegraph",
-              "api_id": os.environ["API_ID"].strip(),
-              "api_hash": os.environ["API_HASH"].strip(),
-              "team_id": "C67CF9S4VU",
-              "is_internal_build": "false",
-              "is_appstore_build": "false",
-              "appstore_id": "0",
-              "app_specific_url_scheme": "aygramm",
-              "premium_iap_product_id": "",
-              "enable_siri": False,
-              "enable_icloud": False,
-          }
+          # Те же настройки, что в официальной сборке без подписи, кроме своих api_id и api_hash.
+          cfg = json.load(open("/Users/Shared/telegram-ios/build-system/appstore-configuration.json"))
+          cfg["api_id"] = os.environ["API_ID"].strip()
+          cfg["api_hash"] = os.environ["API_HASH"].strip()
           json.dump(cfg, open("/Users/Shared/aygramm-config.json", "w"), indent=2)
+          print("config keys:", sorted(cfg))
           EOF
 
       - name: Build
