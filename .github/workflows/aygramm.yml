@@ -68,7 +68,8 @@ jobs:
             --buildNumber="${{ github.run_number }}00"
           mkdir -p "$GITHUB_WORKSPACE/out"
           # Bazel кладёт готовый файл по ссылке bazel-bin/Telegram/Telegram.ipa.
-          cp -L bazel-bin/Telegram/Telegram.ipa "$GITHUB_WORKSPACE/out/AyGramm.ipa"
+          # Свой Bundle ID com.personal.aygramm, чтобы AyGramm ставился рядом с официальным Telegram.
+          python3 "$GITHUB_WORKSPACE/aygramm/rebundle.py" bazel-bin/Telegram/Telegram.ipa "$GITHUB_WORKSPACE/out/AyGramm.ipa"
           ls -la "$GITHUB_WORKSPACE/out"
 
       - uses: actions/upload-artifact@v4
