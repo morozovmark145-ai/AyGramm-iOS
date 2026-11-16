@@ -6,21 +6,46 @@ ROOT="$1"
 cd "$ROOT"
 
 echo "== Имя приложения: AyGramm"
-perl -0pi -e 's#(<key>CFBundleDisplayName</key>\s*<string>)Telegram(</string>)#${1}AyGramm${2}#' Telegram/BUILD
-grep -n -A1 "CFBundleDisplayName" Telegram/BUILD | head -4
+perl -0pi -e 's#(<key>CFBundleDisplayName</key>\s*<string>)Telegram(</string>)#${1}AyGramm${2}#g' Telegram/BUILD
+grep -n -A1 "CFBundleDisplayName" Telegram/BUILD
+if grep -A1 "CFBundleDisplayName" Telegram/BUILD | grep -q "<string>Telegram</string>"; then echo "name not replaced"; exit 1; fi
 # Локализованные названия на домашнем экране.
 find Telegram -name InfoPlist.strings -print0 | while IFS= read -r -d '' f; do
   perl -pi -e 's/^("?CFBundleDisplayName"?\s*=\s*)"[^"]*"/${1}"AyGramm"/' "$f"
 done
 
-echo "== Иконка: призрак AyGramm вместо логотипа Telegram"
+echo "== Иконка AyGramm вместо логотипа Telegram"
 ICON="$ROOT/aygramm/AppIcon.png"
-SET="Telegram/Telegram-iOS/DefaultAppIcon.xcassets/AppIconLLC.appiconset"
-for png in "$SET"/*.png; do
+# Все PNG-иконки: основная, запасные и альтернативные из настроек.
+find Telegram/Telegram-iOS/DefaultAppIcon.xcassets Telegram/Telegram-iOS/AppIcons.xcassets Telegram/Telegram-iOS -maxdepth 2   \( -path '*.appiconset/*.png' -o -path '*.alticon/*.png' \) -print0 | sort -zu | while IFS= read -r -d '' png; do
   w=$(sips -g pixelWidth "$png" | awk '/pixelWidth/{print $2}')
   sips -s format png -z "$w" "$w" "$ICON" --out "$png" >/dev/null
-  echo "  $(basename "$png") ${w}px"
+  echo "  $png ${w}px"
 done
+# Основная иконка iOS 26+ собирается из Telegram.icon (Icon Composer): самолёт и круг заменяются одним слоем с картинкой AyGramm.
+IC=Telegram/Telegram-iOS/Telegram.icon
+rm -f "$IC"/Assets/*
+cp "$ICON" "$IC/Assets/AppIcon.png"
+cat > "$IC/icon.json" <<'JSON'
+{
+  "fill" : "system-light",
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "AppIcon.png",
+          "name" : "AppIcon"
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}
+JSON
+ls -la "$IC" "$IC/Assets"
 
 echo "== Срок тестовых профилей подписи"
 # Профили в build-system/fake-codesigning истекли 30.10.2026, а их сертификат действует до 2030.
