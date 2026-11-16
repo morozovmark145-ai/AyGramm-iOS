@@ -11,7 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      # tgcalls подключён относительной ссылкой ../tgcalls.git. В копии она ведёт в аккаунт владельца копии,
+      # поэтому ссылка заменяется на оригинальный репозиторий Telegram.
+      - name: Submodules
+        run: |
+          git config -f .gitmodules submodule.submodules/TgVoipWebrtc/tgcalls.url https://github.com/TelegramMessenger/tgcalls.git
+          git submodule sync --recursive
+          git -c protocol.version=2 submodule update --init --force --depth=1 --recursive --jobs 8
+          git submodule status --recursive | head -20
 
       - name: Select Xcode
         run: |
