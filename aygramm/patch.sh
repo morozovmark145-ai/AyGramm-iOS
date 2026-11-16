@@ -85,3 +85,12 @@ test "$(grep -c 'AyGrammGhostMode' $S/SynchronizePeerReadState.swift)" = 3
 perl -pi -e 's/^(\s*)(return network\.request\(Api\.functions\.stories\.readStories\()/$1if $ENV{GHOST} { return .complete() }\n$1$2/' $S/ManagedSynchronizeViewStoriesOperations.swift
 test "$(grep -c 'AyGrammGhostMode' $S/ManagedSynchronizeViewStoriesOperations.swift)" = 1
 grep -rn "AyGrammGhostMode" $S | cut -c1-160
+
+echo "== Без iCloud"
+# Telegram при запуске читает запасной адрес сервера из iCloud (CKContainer.default()).
+# После подписи в KSign у приложения нет права на iCloud, и CloudKit аварийно закрывает приложение.
+# Чтение пропускается, пока в Info.plist нет ключа AyGrammCloudKit.
+CD=submodules/CloudData/Sources/CloudData.swift
+perl -pi -e 's/^(\s*)(let container = CKContainer\.default\(\))$/$1if Bundle.main.object(forInfoDictionaryKey: "AyGrammCloudKit") == nil {\n$1    subscriber.putError(.generic)\n$1    return EmptyDisposable\n$1}\n$1$2/' "$CD"
+grep -n -B5 "CKContainer.default" "$CD"
+test "$(grep -c 'AyGrammCloudKit' "$CD")" = 1
