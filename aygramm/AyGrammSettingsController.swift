@@ -7,22 +7,27 @@ import TelegramPresentationData
 import ItemListUI
 import AccountContext
 import PresentationDataUtils
+import LegacyMediaPickerUI
 
 // Меню AyGramm в настройках: режим призрака, удалённые и изменённые сообщения, плагины,
-// сообщество (канал, подписка, счётчик скачиваний) и админ-панель для владельца канала.
+// сообщество (канал, подписка, счётчик скачиваний, версия) и админ-панель для владельца канала.
 
 private final class AyGrammSettingsControllerArguments {
     let toggle: (String, Bool) -> Void
+    let openDeleted: () -> Void
     let openPlugins: () -> Void
     let openChannel: () -> Void
     let joinChannel: () -> Void
+    let openUpdate: () -> Void
     let openAdmin: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openPlugins: @escaping () -> Void, openChannel: @escaping () -> Void, joinChannel: @escaping () -> Void, openAdmin: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDeleted: @escaping () -> Void, openPlugins: @escaping () -> Void, openChannel: @escaping () -> Void, joinChannel: @escaping () -> Void, openUpdate: @escaping () -> Void, openAdmin: @escaping () -> Void) {
         self.toggle = toggle
+        self.openDeleted = openDeleted
         self.openPlugins = openPlugins
         self.openChannel = openChannel
         self.joinChannel = joinChannel
+        self.openUpdate = openUpdate
         self.openAdmin = openAdmin
     }
 }
@@ -41,14 +46,14 @@ private struct AyGrammSettingsState: Equatable {
 
     static func current() -> AyGrammSettingsState {
         var values: [String: Bool] = [:]
-        for key in [AyGrammSettings.hideOnlineKey, AyGrammSettings.hideReadKey, AyGrammSettings.hideTypingKey, AyGrammSettings.hideStoryViewsKey, AyGrammSettings.saveDeletedKey, AyGrammSettings.saveEditsKey, AyGrammSettings.pluginsEnabledKey] {
+        for key in [AyGrammSettings.hideOnlineKey, AyGrammSettings.hideReadKey, AyGrammSettings.hideTypingKey, AyGrammSettings.hideStoryViewsKey, AyGrammSettings.saveDeletedKey, AyGrammSettings.saveEditsKey, AyGrammSettings.silentSendKey, AyGrammSettings.pluginsEnabledKey] {
             values[key] = AyGrammSettings.storedValue(key)
         }
         return AyGrammSettingsState(values: values)
     }
 
     func value(_ key: String) -> Bool {
-        return self.values[key] ?? true
+        return self.values[key] ?? AyGrammSettings.storedValue(key)
     }
 }
 
@@ -58,6 +63,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
     case toggle(Int32, AyGrammSettingsSection, String, String, Bool)
     case ghostFooter
     case messagesHeader
+    case deleted(String)
     case messagesFooter
     case pluginsHeader
     case plugins
@@ -66,6 +72,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
     case channel
     case join
     case downloads(String)
+    case version(String)
     case communityFooter
     case adminHeader
     case admin
@@ -78,51 +85,56 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return AyGrammSettingsSection.ghost.rawValue
         case let .toggle(_, section, _, _, _):
             return section.rawValue
-        case .messagesHeader, .messagesFooter:
+        case .messagesHeader, .deleted, .messagesFooter:
             return AyGrammSettingsSection.messages.rawValue
         case .pluginsHeader, .plugins, .pluginsFooter:
             return AyGrammSettingsSection.plugins.rawValue
-        case .communityHeader, .channel, .join, .downloads, .communityFooter:
+        case .communityHeader, .channel, .join, .downloads, .version, .communityFooter:
             return AyGrammSettingsSection.community.rawValue
         case .adminHeader, .admin:
             return AyGrammSettingsSection.admin.rawValue
         }
     }
 
+    // Порядок: бан 0, призрак 10–19, сообщения 20–29, плагины 30–39, сообщество 40–49, автор 50–59.
     var stableId: Int32 {
         switch self {
         case .bannedInfo:
             return 0
         case .ghostHeader:
-            return 1
+            return 10
         case let .toggle(id, _, _, _, _):
             return id
         case .ghostFooter:
-            return 10
-        case .messagesHeader:
-            return 11
-        case .messagesFooter:
-            return 14
-        case .pluginsHeader:
-            return 15
-        case .plugins:
-            return 17
-        case .pluginsFooter:
-            return 18
-        case .communityHeader:
             return 19
-        case .channel:
+        case .messagesHeader:
             return 20
+        case .deleted:
+            return 27
+        case .messagesFooter:
+            return 29
+        case .pluginsHeader:
+            return 30
+        case .plugins:
+            return 32
+        case .pluginsFooter:
+            return 39
+        case .communityHeader:
+            return 40
+        case .channel:
+            return 41
         case .join:
-            return 21
+            return 42
         case .downloads:
-            return 22
+            return 43
+        case .version:
+            return 44
         case .communityFooter:
-            return 23
+            return 49
         case .adminHeader:
-            return 24
+            return 50
         case .admin:
-            return 25
+            return 51
         }
     }
 
@@ -142,19 +154,23 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
                 arguments.toggle(key, value)
             })
         case .ghostFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Включённые пункты не отправляются на сервер Telegram, поэтому собеседники их не видят. Если ответить в чате, Telegram сам отметит его прочитанным."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Включённые пункты не отправляются на сервер Telegram, поэтому собеседники их не видят. После отправки сообщения AyGramm сразу возвращает статус «не в сети». Чтобы отметить чат прочитанным, зажмите сообщение → «Отправить прочтение». Если ответить в чате, Telegram сам отметит его прочитанным."), sectionId: self.section)
         case .messagesHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "СООБЩЕНИЯ", sectionId: self.section)
+        case let .deleted(count):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Удалённые сообщения", label: count, sectionId: self.section, style: .blocks, action: {
+                arguments.openDeleted()
+            })
         case .messagesFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Удалённое собеседником сообщение остаётся полупрозрачным, рядом со временем появляется 🗑. Прежние версии изменённого сообщения открываются долгим нажатием → «История изменений». Работает для сообщений, которые дошли до телефона, пока AyGramm установлен."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Удалённое собеседником сообщение остаётся полупрозрачным, рядом со временем появляется 🗑. Прежние версии изменённого сообщения открываются долгим нажатием → «История изменений». «Тихая отправка» отправляет ваши сообщения без звука у получателя."), sectionId: self.section)
         case .pluginsHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ПЛАГИНЫ", sectionId: self.section)
         case .plugins:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Каталог плагинов", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Плагины", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openPlugins()
             })
         case .pluginsFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины берутся из открытого каталога на GitHub. Плагин получает только текст вашего исходящего сообщения и не видит переписки."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины из открытого каталога на GitHub и свои: из буфера обмена или из файла .js. Плагин получает только текст вашего исходящего сообщения и не видит переписки."), sectionId: self.section)
         case .communityHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "СООБЩЕСТВО", sectionId: self.section)
         case .channel:
@@ -167,6 +183,10 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             })
         case let .downloads(value):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Скачиваний AyGramm", label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
+        case let .version(value):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Версия", label: value, sectionId: self.section, style: .blocks, action: {
+                arguments.openUpdate()
+            })
         case .communityFooter:
             return ItemListTextItem(presentationData: presentationData, text: .plain(AyGrammCommunity.consentText + " Счётчик скачиваний открытый: это число скачиваний файла на GitHub."), sectionId: self.section)
         case .adminHeader:
@@ -179,29 +199,32 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
     }
 }
 
-private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: String, isAdmin: Bool, isBanned: Bool) -> [AyGrammSettingsEntry] {
+private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: String, version: String, deletedCount: Int, isAdmin: Bool, isBanned: Bool) -> [AyGrammSettingsEntry] {
     var entries: [AyGrammSettingsEntry] = []
     if isBanned {
         entries.append(.bannedInfo)
     }
     entries.append(.ghostHeader)
-    entries.append(.toggle(2, .ghost, AyGrammSettings.hideOnlineKey, "Не отправлять «в сети»", state.value(AyGrammSettings.hideOnlineKey)))
-    entries.append(.toggle(3, .ghost, AyGrammSettings.hideReadKey, "Не отправлять прочтение", state.value(AyGrammSettings.hideReadKey)))
-    entries.append(.toggle(4, .ghost, AyGrammSettings.hideTypingKey, "Не отправлять «печатает…»", state.value(AyGrammSettings.hideTypingKey)))
-    entries.append(.toggle(5, .ghost, AyGrammSettings.hideStoryViewsKey, "Не отправлять просмотр историй", state.value(AyGrammSettings.hideStoryViewsKey)))
+    entries.append(.toggle(11, .ghost, AyGrammSettings.hideOnlineKey, "Не отправлять «в сети»", state.value(AyGrammSettings.hideOnlineKey)))
+    entries.append(.toggle(12, .ghost, AyGrammSettings.hideReadKey, "Не отправлять прочтение", state.value(AyGrammSettings.hideReadKey)))
+    entries.append(.toggle(13, .ghost, AyGrammSettings.hideTypingKey, "Не отправлять «печатает…»", state.value(AyGrammSettings.hideTypingKey)))
+    entries.append(.toggle(14, .ghost, AyGrammSettings.hideStoryViewsKey, "Не отправлять просмотр историй", state.value(AyGrammSettings.hideStoryViewsKey)))
     entries.append(.ghostFooter)
     entries.append(.messagesHeader)
-    entries.append(.toggle(12, .messages, AyGrammSettings.saveDeletedKey, "Сохранять удалённые", state.value(AyGrammSettings.saveDeletedKey)))
-    entries.append(.toggle(13, .messages, AyGrammSettings.saveEditsKey, "Сохранять историю правок", state.value(AyGrammSettings.saveEditsKey)))
+    entries.append(.toggle(21, .messages, AyGrammSettings.saveDeletedKey, "Сохранять удалённые", state.value(AyGrammSettings.saveDeletedKey)))
+    entries.append(.toggle(22, .messages, AyGrammSettings.saveEditsKey, "Сохранять историю правок", state.value(AyGrammSettings.saveEditsKey)))
+    entries.append(.toggle(23, .messages, AyGrammSettings.silentSendKey, "Тихая отправка", state.value(AyGrammSettings.silentSendKey)))
+    entries.append(.deleted("\(deletedCount)"))
     entries.append(.messagesFooter)
     entries.append(.pluginsHeader)
-    entries.append(.toggle(16, .plugins, AyGrammSettings.pluginsEnabledKey, "Плагины включены", state.value(AyGrammSettings.pluginsEnabledKey)))
+    entries.append(.toggle(31, .plugins, AyGrammSettings.pluginsEnabledKey, "Плагины включены", state.value(AyGrammSettings.pluginsEnabledKey)))
     entries.append(.plugins)
     entries.append(.pluginsFooter)
     entries.append(.communityHeader)
     entries.append(.channel)
     entries.append(.join)
     entries.append(.downloads(downloads))
+    entries.append(.version(version))
     entries.append(.communityFooter)
     if isAdmin {
         entries.append(.adminHeader)
@@ -213,17 +236,30 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
 func ayGrammSettingsController(context: AccountContext, openChannel: @escaping () -> Void) -> ViewController {
     let statePromise = ValuePromise(AyGrammSettingsState.current(), ignoreRepeated: true)
     let downloadsPromise = ValuePromise<String>("…", ignoreRepeated: true)
+    let versionPromise = ValuePromise<String>("0.\(AyGrammSettings.currentVersion)", ignoreRepeated: true)
+    let deletedCountPromise = ValuePromise<Int>(AyGrammDeletedLog.entries().count, ignoreRepeated: true)
     let isAdminPromise = ValuePromise<Bool>(false, ignoreRepeated: true)
     let isBannedPromise = ValuePromise<Bool>(AyGrammSettings.isBanned, ignoreRepeated: true)
     let actionsDisposable = DisposableSet()
+    var latestRelease: AyGrammRelease?
 
     var pushControllerImpl: ((ViewController) -> Void)?
     var presentControllerImpl: ((ViewController) -> Void)?
+
+    let showMessage: (String) -> Void = { text in
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        presentControllerImpl?(textAlertController(context: context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+    }
 
     let arguments = AyGrammSettingsControllerArguments(
         toggle: { key, value in
             AyGrammSettings.setValue(key, value)
             statePromise.set(AyGrammSettingsState.current())
+        },
+        openDeleted: {
+            pushControllerImpl?(ayGrammDeletedController(context: context, updatedCount: { count in
+                deletedCountPromise.set(count)
+            }))
         },
         openPlugins: {
             pushControllerImpl?(ayGrammPluginsController(context: context))
@@ -234,9 +270,15 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
         joinChannel: {
             actionsDisposable.add((AyGrammCommunity.join(engine: context.engine)
             |> deliverOnMainQueue).start(completed: {
-                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-                presentControllerImpl?(textAlertController(context: context, title: nil, text: "Готово: вы подписаны на канал AyGramm.", actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+                showMessage("Готово: вы подписаны на канал AyGramm.")
             }))
+        },
+        openUpdate: {
+            if let release = latestRelease, release.version > AyGrammSettings.currentVersion {
+                context.sharedContext.applicationBindings.openUrl(release.url)
+            } else {
+                showMessage("У вас последняя версия AyGramm.")
+            }
         },
         openAdmin: {
             pushControllerImpl?(ayGrammAdminController(context: context))
@@ -251,6 +293,13 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
             downloadsPromise.set("нет данных")
         }
     }))
+    actionsDisposable.add((AyGrammCommunity.latestRelease()
+    |> deliverOnMainQueue).start(next: { release in
+        latestRelease = release
+        if let release = release, release.version > AyGrammSettings.currentVersion {
+            versionPromise.set("0.\(AyGrammSettings.currentVersion) → есть 0.\(release.version)")
+        }
+    }))
     actionsDisposable.add((AyGrammCommunity.ownParticipant(engine: context.engine, accountPeerId: context.account.peerId)
     |> deliverOnMainQueue).start(next: { participant in
         isAdminPromise.set(AyGrammCommunity.isAdmin(participant))
@@ -262,13 +311,14 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
     let signal = combineLatest(queue: .mainQueue(),
         context.sharedContext.presentationData,
         statePromise.get(),
-        downloadsPromise.get(),
+        combineLatest(downloadsPromise.get(), versionPromise.get(), deletedCountPromise.get()),
         isAdminPromise.get(),
         isBannedPromise.get()
     )
-    |> map { presentationData, state, downloads, isAdmin, isBanned -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, state, info, isAdmin, isBanned -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let (downloads, version, deletedCount) = info
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("AyGramm"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: ayGrammSettingsEntries(state: state, downloads: downloads, isAdmin: isAdmin, isBanned: isBanned), style: .blocks, animateChanges: true)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: ayGrammSettingsEntries(state: state, downloads: downloads, version: version, deletedCount: deletedCount, isAdmin: isAdmin, isBanned: isBanned), style: .blocks, animateChanges: true)
         return (controllerState, (listState, arguments))
     }
     |> afterDisposed {
@@ -285,18 +335,141 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
     return controller
 }
 
+// MARK: - Удалённые сообщения
+
+private final class AyGrammDeletedControllerArguments {
+    let copyAll: () -> Void
+    let clear: () -> Void
+
+    init(copyAll: @escaping () -> Void, clear: @escaping () -> Void) {
+        self.copyAll = copyAll
+        self.clear = clear
+    }
+}
+
+private enum AyGrammDeletedEntry: ItemListNodeEntry {
+    case actionsHeader(String)
+    case copyAll
+    case clear
+    case listHeader
+    case item(Int32, String)
+    case empty
+
+    var section: ItemListSectionId {
+        switch self {
+        case .actionsHeader, .copyAll, .clear:
+            return 0
+        case .listHeader, .item, .empty:
+            return 1
+        }
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case .actionsHeader:
+            return 0
+        case .copyAll:
+            return 1
+        case .clear:
+            return 2
+        case .listHeader:
+            return 10
+        case .empty:
+            return 11
+        case let .item(index, _):
+            return 100 + index
+        }
+    }
+
+    static func <(lhs: AyGrammDeletedEntry, rhs: AyGrammDeletedEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let arguments = arguments as! AyGrammDeletedControllerArguments
+        switch self {
+        case let .actionsHeader(text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case .copyAll:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Скопировать всё", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.copyAll()
+            })
+        case .clear:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Очистить список", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.clear()
+            })
+        case .listHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ПОСЛЕДНИЕ 300, НОВЫЕ СВЕРХУ", sectionId: self.section)
+        case let .item(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case .empty:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Пока ничего не удаляли."), sectionId: self.section)
+        }
+    }
+}
+
+private func ayGrammDeletedController(context: AccountContext, updatedCount: @escaping (Int) -> Void) -> ViewController {
+    let entriesPromise = ValuePromise<[AyGrammDeletedLogEntry]>(AyGrammDeletedLog.entries(), ignoreRepeated: true)
+    var presentControllerImpl: ((ViewController) -> Void)?
+
+    let arguments = AyGrammDeletedControllerArguments(copyAll: {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        UIPasteboard.general.string = AyGrammDeletedLog.exportText()
+        presentControllerImpl?(textAlertController(context: context, title: nil, text: "Все удалённые сообщения скопированы. Их можно вставить в «Избранное» или в заметки.", actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+    }, clear: {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        presentControllerImpl?(textAlertController(context: context, title: nil, text: "Очистить список удалённых сообщений? Сами сообщения в чатах останутся.", actions: [
+            TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
+            TextAlertAction(type: .destructiveAction, title: "Очистить", action: {
+                AyGrammDeletedLog.clear()
+                entriesPromise.set([])
+                updatedCount(0)
+            })
+        ]))
+    })
+
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        entriesPromise.get()
+    )
+    |> map { presentationData, logEntries -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        var entries: [AyGrammDeletedEntry] = []
+        entries.append(.actionsHeader("СОХРАНЕНО: \(logEntries.count)"))
+        entries.append(.copyAll)
+        entries.append(.clear)
+        entries.append(.listHeader)
+        if logEntries.isEmpty {
+            entries.append(.empty)
+        }
+        for (index, entry) in logEntries.prefix(300).enumerated() {
+            entries.append(.item(Int32(index), AyGrammDeletedLog.describe(entry)))
+        }
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Удалённые"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, arguments))
+    }
+
+    let controller = ItemListController(context: context, state: signal)
+    presentControllerImpl = { [weak controller] c in
+        controller?.present(c, in: .window(.root))
+    }
+    return controller
+}
+
 // MARK: - Каталог плагинов
 
 private final class AyGrammPluginsControllerArguments {
     let toggle: (AyGrammPlugin, Bool) -> Void
     let toggleCustom: (AyGrammCustomPlugin, Bool) -> Void
     let addCustom: () -> Void
+    let addFile: () -> Void
     let removeDisabledCustom: () -> Void
 
-    init(toggle: @escaping (AyGrammPlugin, Bool) -> Void, toggleCustom: @escaping (AyGrammCustomPlugin, Bool) -> Void, addCustom: @escaping () -> Void, removeDisabledCustom: @escaping () -> Void) {
+    init(toggle: @escaping (AyGrammPlugin, Bool) -> Void, toggleCustom: @escaping (AyGrammCustomPlugin, Bool) -> Void, addCustom: @escaping () -> Void, addFile: @escaping () -> Void, removeDisabledCustom: @escaping () -> Void) {
         self.toggle = toggle
         self.toggleCustom = toggleCustom
         self.addCustom = addCustom
+        self.addFile = addFile
         self.removeDisabledCustom = removeDisabledCustom
     }
 }
@@ -309,6 +482,7 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
     case customHeader
     case custom(Int32, AyGrammCustomPlugin, Bool)
     case addCustom
+    case addFile
     case removeDisabled
     case customFooter
 
@@ -316,7 +490,7 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
         switch self {
         case .header, .status, .plugin, .footer:
             return 0
-        case .customHeader, .custom, .addCustom, .removeDisabled, .customFooter:
+        case .customHeader, .custom, .addCustom, .addFile, .removeDisabled, .customFooter:
             return 1
         }
     }
@@ -337,8 +511,10 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
             return 5100 + index
         case .addCustom:
             return 5900
-        case .removeDisabled:
+        case .addFile:
             return 5901
+        case .removeDisabled:
+            return 5902
         case .customFooter:
             return 6000
         }
@@ -371,12 +547,16 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.addCustom()
             })
+        case .addFile:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить из файла", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.addFile()
+            })
         case .removeDisabled:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Удалить выключенные", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.removeDisabledCustom()
             })
         case .customFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Скопируйте код плагина или ссылку на файл .js и нажмите «Добавить из буфера обмена». Плагин — это JavaScript с функцией onOutgoingText(text), она возвращает новый текст сообщения. Первая строка «// Название» станет названием плагина. Ставьте только плагины, которым доверяете: плагин может менять ваши исходящие сообщения."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Скопируйте код плагина или ссылку на файл .js и нажмите «Добавить из буфера обмена», или выберите файл .js в «Файлах». Плагин — это JavaScript с функцией onOutgoingText(text), она возвращает новый текст сообщения. Первая строка «// Название» станет названием плагина. Ставьте только плагины, которым доверяете: плагин может менять ваши исходящие сообщения."), sectionId: self.section)
         }
     }
 }
@@ -392,6 +572,22 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
     let showMessage: (String) -> Void = { text in
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         presentControllerImpl?(textAlertController(context: context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+    }
+
+    let addCode: (String) -> Void = { code in
+        actionsDisposable.add((AyGrammPlugins.addCustom(from: code)
+        |> deliverOnMainQueue).start(next: { result in
+            switch result {
+            case let .installed(name):
+                showMessage("Плагин «\(name)» добавлен и включён.")
+            case .invalid:
+                showMessage("Это не плагин AyGramm: в коде нет функции onOutgoingText или он выполняется с ошибкой.")
+            case .downloadFailed:
+                showMessage("Не удалось скачать файл по ссылке.")
+            }
+            customPromise.set(AyGrammPlugins.customPlugins)
+            installedPromise.set(AyGrammPlugins.installedIds)
+        }))
     }
 
     let arguments = AyGrammPluginsControllerArguments(toggle: { plugin, value in
@@ -412,18 +608,18 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
             showMessage("Буфер обмена пуст. Скопируйте код плагина или ссылку на файл .js.")
             return
         }
-        actionsDisposable.add((AyGrammPlugins.addCustom(from: clipboard)
-        |> deliverOnMainQueue).start(next: { result in
-            switch result {
-            case let .installed(name):
-                showMessage("Плагин «\(name)» добавлен и включён.")
-            case .invalid:
-                showMessage("Это не плагин AyGramm: в коде нет функции onOutgoingText или он выполняется с ошибкой.")
-            case .downloadFailed:
-                showMessage("Не удалось скачать файл по ссылке.")
+        addCode(clipboard)
+    }, addFile: {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        presentControllerImpl?(legacyICloudFilePicker(theme: presentationData.theme, mode: .import, documentTypes: ["public.item"], completion: { urls in
+            guard let url = urls.first else {
+                return
             }
-            customPromise.set(AyGrammPlugins.customPlugins)
-            installedPromise.set(AyGrammPlugins.installedIds)
+            if let code = try? String(contentsOf: url, encoding: .utf8) {
+                addCode(code)
+            } else {
+                showMessage("Не удалось прочитать файл. Нужен текстовый файл .js.")
+            }
         }))
     }, removeDisabledCustom: {
         AyGrammPlugins.removeDisabledCustom()
@@ -460,6 +656,7 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
             entries.append(.custom(Int32(index), plugin, installed.contains(plugin.id)))
         }
         entries.append(.addCustom)
+        entries.append(.addFile)
         if custom.contains(where: { !installed.contains($0.id) }) {
             entries.append(.removeDisabled)
         }
