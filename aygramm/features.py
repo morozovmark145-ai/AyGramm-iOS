@@ -49,9 +49,10 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift"]:
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift"]:
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
+shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
 shutil.copy(ROOT / "aygramm/AyGrammKeepAlive.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammKeepAlive.swift")
 
@@ -252,5 +253,49 @@ replace("submodules/TelegramUI/Sources/ApplicationContext.swift",
         "                }\n"
         "            }\n"
         "            if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {\n")
+
+# Украшения: свои подарки видны только на этом телефоне, во вкладке «Подарки» своего профиля,
+# с лентой «украшение» вместо номера. Нажатие показывает, что это украшение.
+GIFTS = f"{CORE}/TelegramEngine/Payments/StarGifts.swift"
+replace(GIFTS,
+        "    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        return Signal { subscriber in\n",
+        "    public var state: Signal<ProfileGiftsContext.State, NoError> {\n"
+        "        let isOwn = self.ayGrammIsOwn\n"
+        "        return combineLatest(self.ayGrammServerState, AyGrammDecorations.updates)\n"
+        "        |> map { state, _ -> ProfileGiftsContext.State in\n"
+        "            return isOwn ? ayGrammWithDecorations(state) : state\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    var ayGrammServerState: Signal<ProfileGiftsContext.State, NoError> {\n"
+        "        return Signal { subscriber in\n")
+replace(GIFTS, "    public let peerId: EnginePeer.Id\n    public let collectionId: Int32?\n    \n    public init(\n        account: Account,\n",
+        "    public let peerId: EnginePeer.Id\n    public let collectionId: Int32?\n    let ayGrammIsOwn: Bool\n    \n    public init(\n        account: Account,\n")
+replace(GIFTS, "        limit: Int32 = 36\n    ) {\n        self.peerId = peerId\n        self.collectionId = collectionId\n",
+        "        limit: Int32 = 36\n    ) {\n        self.peerId = peerId\n        self.collectionId = collectionId\n"
+        "        self.ayGrammIsOwn = peerId == account.peerId && collectionId == nil\n")
+replace(f"{PEER}/PeerInfoData.swift",
+        "                        if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {\n                            availablePanes?.insert(.gifts, at: 1)\n",
+        "                        if (cachedData.starGiftsCount ?? 0) > 0 || AyGrammDecorations.hasGifts {\n                            availablePanes?.insert(.gifts, at: 1)\n")
+GLIST = "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/GiftsListView.swift"
+replace(GLIST, "                let itemReferenceId = product.reference?.stringValue ?? \"\"\n",
+        "                if AyGrammDecorations.isDecoration(product) {\n"
+        "                    ribbonText = AyGrammDecorations.ribbonText\n"
+        "                    ribbonFont = .generic\n"
+        "                    if case .generic = product.gift {\n"
+        "                        ribbonColor = .purple\n"
+        "                    }\n"
+        "                }\n"
+        "                let itemReferenceId = product.reference?.stringValue ?? \"\"\n")
+replace(GLIST, "                                guard let self, !isAdded, let presentationData = self.currentParams?.presentationData else {\n                                    return\n                                }\n",
+        "                                guard let self, !isAdded, let presentationData = self.currentParams?.presentationData else {\n                                    return\n                                }\n"
+        "                                if AyGrammDecorations.isDecoration(product) {\n"
+        "                                    self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: AyGrammDecorations.marker, timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
+        "                                    return\n"
+        "                                }\n")
+replace(GLIST, "(self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }",
+        "(self.starsProducts ?? []).filter { !AyGrammDecorations.isDecoration($0) }.map { .profileGift(self.peerId, $0) }")
+replace(GLIST, "let index = self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0",
+        "let index = self.starsProducts?.filter({ !AyGrammDecorations.isDecoration($0) }).firstIndex(where: { $0 == product }) ?? 0")
 
 print("AyGramm: все правки применены")
