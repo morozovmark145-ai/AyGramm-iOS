@@ -1,5 +1,30 @@
 [
-  {"id": "capitalize", "name": "Заглавная буква", "description": "Первая буква сообщения и каждого предложения становится заглавной.", "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/capitalize.js", "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/capitalize.js"},
-  {"id": "smileys", "name": "Смайлы в эмодзи", "description": "Заменяет :) ;) :( :D <3 на эмодзи.", "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/smileys.js", "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/smileys.js"},
-  {"id": "nodot", "name": "Без точки в конце", "description": "Убирает одиночную точку в конце сообщения.", "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/nodot.js", "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/nodot.js"}
+  {
+    "id": "capitalize",
+    "name": "Заглавная буква",
+    "description": "Первая буква сообщения и каждого предложения становится заглавной.",
+    "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/capitalize.js",
+    "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/capitalize.js"
+  },
+  {
+    "id": "smileys",
+    "name": "Смайлы в эмодзи",
+    "description": "Заменяет :) ;) :( :D <3 на эмодзи.",
+    "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/smileys.js",
+    "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/smileys.js"
+  },
+  {
+    "id": "nodot",
+    "name": "Без точки в конце",
+    "description": "Убирает одиночную точку в конце сообщения.",
+    "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/nodot.js",
+    "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/nodot.js"
+  },
+  {
+    "id": "commands",
+    "name": "Команды",
+    "description": ".calc 2+2 считает пример, .time пишет время, .shrug ставит ¯\\_(ツ)_/¯.",
+    "script": "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/commands.js",
+    "source": "https://github.com/morozovmark145-ai/AyGramm-iOS/blob/master/aygramm/plugins/commands.js"
+  }
 ]
