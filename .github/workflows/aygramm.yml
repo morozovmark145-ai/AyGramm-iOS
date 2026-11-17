@@ -7,6 +7,8 @@ jobs:
   build:
     runs-on: xcode-27
     timeout-minutes: 360
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -73,13 +75,17 @@ jobs:
           # Bazel кладёт готовый файл по ссылке bazel-bin/Telegram/Telegram.ipa.
           # Свой Bundle ID com.personal.aygramm, чтобы AyGramm ставился рядом с официальным Telegram.
           python3 "$GITHUB_WORKSPACE/aygramm/rebundle.py" bazel-bin/Telegram/Telegram.ipa "$GITHUB_WORKSPACE/out/AyGramm.ipa"
-          # AyGramm-lite.ipa: без расширений (виджет, «Поделиться», Siri, уведомления), ставится через KSign надёжнее.
+          # AyGramm-lite.ipa: без расширений (виджет, «Поделиться», Siri, уведомления) и без лишних языков iOS, кроме ru, uk и en.
           python3 - "$GITHUB_WORKSPACE/out/AyGramm.ipa" "$GITHUB_WORKSPACE/out/AyGramm-lite.ipa" <<'PY'
           import sys, zipfile
           src, dst = sys.argv[1], sys.argv[2]
-          with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+          keep = ("ru.lproj/", "uk.lproj/", "en.lproj/", "Base.lproj/")
+          with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zout:
               for item in zin.infolist():
-                  if item.filename.startswith(("Payload/Telegram.app/PlugIns/", "Payload/Telegram.app/_CodeSignature/")):
+                  name = item.filename
+                  if name.startswith(("Payload/Telegram.app/PlugIns/", "Payload/Telegram.app/_CodeSignature/")):
+                      continue
+                  if ".lproj/" in name and not any(k in name for k in keep):
                       continue
                   zout.writestr(item, zin.read(item.filename))
           PY
@@ -92,3 +98,13 @@ jobs:
             out/AyGramm.ipa
             out/AyGramm-lite.ipa
           retention-days: 30
+
+      # Прямые ссылки без входа в GitHub: релиз «test» всегда хранит последнюю сборку.
+      # https://github.com/morozovmark145-ai/AyGramm-iOS/releases/download/test/AyGramm-lite.ipa
+      - name: Publish test build
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view test -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create test -R "$GITHUB_REPOSITORY" --prerelease --title "AyGramm: последняя тестовая сборка" --notes "Файлы обновляются после каждой сборки. AyGramm-lite.ipa меньше и ставится через KSign проще."
+          gh release upload test out/AyGramm.ipa out/AyGramm-lite.ipa -R "$GITHUB_REPOSITORY" --clobber
