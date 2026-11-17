@@ -49,8 +49,80 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-shutil.copy(ROOT / "aygramm/AyGrammSettings.swift", ROOT / CORE / "AyGramm/AyGrammSettings.swift")
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift"]:
+    shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
+shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
+
+# Метки удалённых сообщений и истории правок хранятся в базе сообщений, их тип надо зарегистрировать.
+replace(f"{CORE}/Account/AccountManager.swift",
+        "    declareEncodable(GuestChatMessageAttribute.self, f: { GuestChatMessageAttribute(decoder: $0) })\n",
+        "    declareEncodable(GuestChatMessageAttribute.self, f: { GuestChatMessageAttribute(decoder: $0) })\n"
+        "    declareEncodable(AyGrammDeletedMessageAttribute.self, f: { AyGrammDeletedMessageAttribute(decoder: $0) })\n"
+        "    declareEncodable(AyGrammEditHistoryMessageAttribute.self, f: { AyGrammEditHistoryMessageAttribute(decoder: $0) })\n")
+
+# Правка с сервера: прежний текст уходит в историю.
+replace(f"{CORE}/State/Sync/StateReplay+Messages.swift",
+        "            return .update(mergedServerMessageUpdate(previous: previousMessage, updated: message))\n",
+        "            return .update(ayGrammWithEditHistory(previous: previousMessage, updated: mergedServerMessageUpdate(previous: previousMessage, updated: message)))\n")
+
+# Плагины меняют текст исходящих сообщений перед отправкой.
+replace(f"{CORE}/PendingMessages/EnqueueMessage.swift",
+        "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n",
+        "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
+        "    let messages = ayGrammTransformOutgoing(messages)\n")
+
+# Удалённое сообщение полупрозрачное; переход в это состояние плавный, 0.4 с.
+replace("submodules/TelegramUI/Components/Chat/ChatMessageItemView/Sources/ChatMessageItemView.swift",
+        "    open func setupItem(_ item: ChatMessageItem, synchronousLoad: Bool) {\n        self.item = item\n    }\n",
+        "    open func setupItem(_ item: ChatMessageItem, synchronousLoad: Bool) {\n"
+        "        let previousMessageId = self.item?.message.id\n"
+        "        let wasDeleted = self.item?.message.ayGrammIsDeleted ?? false\n"
+        "        self.item = item\n"
+        "        let isDeleted = item.message.ayGrammIsDeleted\n"
+        "        let targetAlpha: CGFloat = isDeleted ? 0.55 : 1.0\n"
+        "        if self.alpha != targetAlpha {\n"
+        "            if isDeleted && !wasDeleted && previousMessageId == item.message.id {\n"
+        "                ContainedViewLayoutTransition.animated(duration: 0.4, curve: .easeInOut).updateAlpha(node: self, alpha: targetAlpha)\n"
+        "            } else {\n"
+        "                self.alpha = targetAlpha\n"
+        "            }\n"
+        "        }\n"
+        "    }\n")
+
+# Значок корзины перед временем удалённого сообщения.
+replace("submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/StringForMessageTimestampStatus.swift",
+        "\n    return dateText\n}",
+        "\n    if message._asMessage().ayGrammIsDeleted {\n        dateText = \"🗑 \" + dateText\n    }\n    return dateText\n}")
+
+# «История изменений» в меню сообщения по долгому нажатию.
+replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n",
+        "        if let ayGrammHistoryText = ayGrammEditHistoryDescription(message) {\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"История изменений\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { c, _ in\n"
+        "                c?.dismiss(completion: {\n"
+        "                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }\n"
+        "                    controllerInteraction.presentController(textAlertController(\n"
+        "                        context: context,\n"
+        "                        title: \"История изменений\",\n"
+        "                        text: ayGrammHistoryText,\n"
+        "                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})],\n"
+        "                        actionLayout: .vertical\n"
+        "                    ), nil)\n"
+        "                })\n"
+        "            })))\n"
+        "        }\n"
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n")
+
+# После входа в аккаунт: проверка бана, согласие на подписку, подсказка о плагинах.
+replace("submodules/TelegramUI/Sources/AppDelegate.swift",
+        "                    self.mainWindow.viewController = context.rootController\n",
+        "                    self.mainWindow.viewController = context.rootController\n"
+        "                    ayGrammAccountReady(context: context.context, presentAlert: { alert in\n"
+        "                        self.mainWindow?.presentNative(alert)\n"
+        "                    })\n")
 
 # «В сети»: вместо него отправляется «не в сети».
 replace(f"{CORE}/State/ManagedAccountPresence.swift",
