@@ -210,16 +210,65 @@ public enum AyGrammPlugins {
             guard let script = try? String(contentsOf: fileUrl(id: id), encoding: .utf8), let context = JSContext() else {
                 continue
             }
+            let name = pluginName(id: id)
+            context.exceptionHandler = { _, exception in
+                AyGrammPluginLog.add("Ошибка в «\(name)»: " + (exception?.toString() ?? "неизвестная ошибка"))
+            }
             _ = context.evaluateScript(script)
             guard let function = context.objectForKeyedSubscript("onOutgoingText"), !function.isUndefined else {
                 continue
             }
             if let value = function.call(withArguments: [result]), value.isString, let string = value.toString() {
+                if string != result {
+                    AyGrammPluginLog.add("«\(name)»: " + result + " → " + string)
+                }
                 result = string
             }
         }
         return result
     }
+
+    // Название для журнала: у своего плагина из первой строки, у плагина каталога его id.
+    static func pluginName(id: String) -> String {
+        let names = UserDefaults.standard.dictionary(forKey: customKey) as? [String: String] ?? [:]
+        return names[id] ?? id
+    }
+}
+
+// Журнал плагинов: что плагин изменил в сообщении и ошибки в коде плагина. Последние 100 записей.
+public enum AyGrammPluginLog {
+    static let key = "AyGrammPluginLog"
+
+    public static func entries() -> [String] {
+        return UserDefaults.standard.stringArray(forKey: key) ?? []
+    }
+
+    static func add(_ text: String) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd.MM HH:mm"
+        var list = entries()
+        list.insert(formatter.string(from: Date()) + "  " + String(text.prefix(300)), at: 0)
+        UserDefaults.standard.set(Array(list.prefix(100)), forKey: key)
+    }
+
+    public static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
+// Встроенный плагин «Подстановки»: {дата}, {время} и {день} заменяются на текущие значения.
+func ayGrammReplaceTokens(_ text: String) -> String {
+    let now = Date()
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "ru_RU")
+    var result = text
+    formatter.dateFormat = "dd.MM.yyyy"
+    result = result.replacingOccurrences(of: "{дата}", with: formatter.string(from: now))
+    formatter.dateFormat = "HH:mm"
+    result = result.replacingOccurrences(of: "{время}", with: formatter.string(from: now))
+    formatter.dateFormat = "EEEE"
+    result = result.replacingOccurrences(of: "{день}", with: formatter.string(from: now))
+    return result
 }
 
 // Исходящие сообщения перед отправкой:
@@ -229,7 +278,8 @@ public enum AyGrammPlugins {
 func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] {
     let usePlugins = AyGrammSettings.pluginsEnabled && !AyGrammPlugins.installedIds.isEmpty
     let silent = AyGrammSettings.silentSend
-    if !usePlugins && !silent {
+    let useTokens = AyGrammSettings.value(AyGrammSettings.tokensKey)
+    if !usePlugins && !silent && !useTokens {
         return messages
     }
     return messages.map { message -> EnqueueMessage in
@@ -247,8 +297,11 @@ func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] 
                     hasNotificationInfo = true
                 }
             }
+            if useTokens && !hasEntities && text.contains("{") {
+                updatedText = ayGrammReplaceTokens(updatedText)
+            }
             if usePlugins && !text.isEmpty && !hasEntities {
-                let transformed = AyGrammPlugins.transformOutgoingText(text)
+                let transformed = AyGrammPlugins.transformOutgoingText(updatedText)
                 if !transformed.isEmpty {
                     updatedText = transformed
                 }
