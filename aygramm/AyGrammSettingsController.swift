@@ -184,7 +184,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
                 arguments.openPlugins()
             })
         case .decorations:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Украшения профиля", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Встроенные плагины", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openDecorations()
             })
         case .pluginsFooter:
@@ -226,9 +226,6 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
     if isBanned {
         entries.append(.bannedInfo)
     }
-    entries.append(.backgroundHeader)
-    entries.append(.toggle(2, .background, AyGrammSettings.keepAliveKey, "Звонки в фоне", state.value(AyGrammSettings.keepAliveKey)))
-    entries.append(.backgroundFooter)
     entries.append(.ghostHeader)
     entries.append(.toggle(11, .ghost, AyGrammSettings.hideOnlineKey, "Не отправлять «в сети»", state.value(AyGrammSettings.hideOnlineKey)))
     entries.append(.toggle(12, .ghost, AyGrammSettings.hideReadKey, "Не отправлять прочтение", state.value(AyGrammSettings.hideReadKey)))
@@ -291,7 +288,7 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
             pushControllerImpl?(ayGrammPluginsController(context: context))
         },
         openDecorations: {
-            pushControllerImpl?(ayGrammDecorationsController(context: context))
+            pushControllerImpl?(ayGrammBuiltinController(context: context))
         },
         openChannel: {
             openChannel()
