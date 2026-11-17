@@ -53,6 +53,7 @@ for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
+shutil.copy(ROOT / "aygramm/AyGrammKeepAlive.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammKeepAlive.swift")
 
 # Метки удалённых сообщений и истории правок хранятся в базе сообщений, их тип надо зарегистрировать.
 replace(f"{CORE}/Account/AccountManager.swift",
@@ -219,5 +220,37 @@ replace(f"{PEER}/PeerInfoScreenSettingsActions.swift",
         "            push(ayGrammSettingsController(context: self.context, openChannel: { [weak self] in\n"
         "                self?.openPeerMention(\"augrammipa\")\n"
         "            }))\n")
+
+# Аккаунты без лимита: Telegram пускает 3 аккаунта, с Premium 4. В AyGramm предел 1000.
+for rel in [f"{PEER}/PeerInfoScreenSettingsActions.swift",
+            "submodules/SettingsUI/Sources/LogoutOptionsController.swift",
+            "submodules/SettingsUI/Sources/DeleteAccountOptionsController.swift"]:
+    replace(rel, "var maximumAvailableAccounts: Int = 3", "var maximumAvailableAccounts: Int = 1000")
+    replace(rel, "maximumAvailableAccounts = 4\n", "maximumAvailableAccounts = 1000\n", 2)
+replace("submodules/AccountUtils/Sources/AccountUtils.swift",
+        "public let maximumNumberOfAccounts = 3\npublic let maximumPremiumNumberOfAccounts = 4\n",
+        "public let maximumNumberOfAccounts = 1000\npublic let maximumPremiumNumberOfAccounts = 1000\n")
+
+# «Звонки в фоне»: свёрнутый AyGramm играет тишину и держит соединение всех аккаунтов.
+WAKE = "submodules/TelegramUI/Sources/SharedWakeupManager.swift"
+replace(WAKE, "            strongSelf.inForeground = value\n",
+        "            strongSelf.inForeground = value\n"
+        "            AyGrammKeepAlive.shared.update(inForeground: value, hasOtherAudio: strongSelf.hasActiveAudioSession)\n")
+replace(WAKE, "            strongSelf.hasActiveAudioSession = value\n",
+        "            strongSelf.hasActiveAudioSession = value\n"
+        "            AyGrammKeepAlive.shared.update(inForeground: strongSelf.inForeground, hasOtherAudio: value)\n")
+replace(WAKE, "|| self.silenceAudioRenderer != nil {",
+        "|| self.silenceAudioRenderer != nil || AyGrammKeepAlive.shared.isRunning {")
+replace(WAKE, "if (self.inForeground && primary) || !tasks.isEmpty || (self.activeExplicitExtensionTimer != nil && primary) {",
+        "if (self.inForeground && primary) || !tasks.isEmpty || (self.activeExplicitExtensionTimer != nil && primary) || AyGrammKeepAlive.shared.isRunning {")
+# Уведомление о сообщении, пока AyGramm свёрнут: push от Telegram не приходит.
+replace("submodules/TelegramUI/Sources/ApplicationContext.swift",
+        "            if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {\n",
+        "            if UIApplication.shared.applicationState != .active {\n"
+        "                for (messages, _, notify, _) in messageList where notify {\n"
+        "                    AyGrammKeepAlive.notify(messages: messages)\n"
+        "                }\n"
+        "            }\n"
+        "            if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {\n")
 
 print("AyGramm: все правки применены")
