@@ -28,16 +28,31 @@ func ayGrammAccountReady(context: AccountContext, presentAlert: @escaping (UIAle
             presentAlert(alert)
             return
         }
-        let _ = (AyGrammPlugins.catalog()
-        |> deliverOnMainQueue).start(next: { catalog in
-            let unseen = AyGrammPlugins.unseen(in: catalog)
-            guard let plugin = unseen.first else {
+        let _ = (AyGrammCommunity.latestRelease()
+        |> deliverOnMainQueue).start(next: { release in
+            let skipped = UserDefaults.standard.integer(forKey: "AyGrammSkippedVersion")
+            if let release = release, release.version > AyGrammSettings.currentVersion, release.version != skipped {
+                let alert = UIAlertController(title: "Вышла AyGramm 0.\(release.version)", message: "У вас версия 0.\(AyGrammSettings.currentVersion). Новый файл лежит на GitHub и в канале @\(AyGrammCommunity.channelUsername).", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "Скачать", style: .default, handler: { _ in
+                    context.sharedContext.applicationBindings.openUrl(release.url)
+                }))
+                alert.addAction(UIAlertAction(title: "Не сейчас", style: .cancel, handler: { _ in
+                    UserDefaults.standard.set(release.version, forKey: "AyGrammSkippedVersion")
+                }))
+                presentAlert(alert)
                 return
             }
-            AyGrammPlugins.markSeen(unseen.map { $0.id })
-            let alert = UIAlertController(title: "Новый плагин: \(plugin.name)", message: plugin.description + "\n\nВключить: Настройки → AyGramm → Каталог плагинов.", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-            presentAlert(alert)
+            let _ = (AyGrammPlugins.catalog()
+            |> deliverOnMainQueue).start(next: { catalog in
+                let unseen = AyGrammPlugins.unseen(in: catalog)
+                guard let plugin = unseen.first else {
+                    return
+                }
+                AyGrammPlugins.markSeen(unseen.map { $0.id })
+                let alert = UIAlertController(title: "Новый плагин: \(plugin.name)", message: plugin.description + "\n\nВключить: Настройки → AyGramm → Плагины.", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+                presentAlert(alert)
+            })
         })
     })
 }
