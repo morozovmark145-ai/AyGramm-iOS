@@ -12,9 +12,10 @@ public enum AyGrammSettings {
     public static let saveEditsKey = "AyGrammSaveEdits"
     public static let pluginsEnabledKey = "AyGrammPluginsEnabled"
     public static let silentSendKey = "AyGrammSilentSend"
+    public static let keepAliveKey = "AyGrammKeepAlive"
     static let bannedKey = "AyGrammBanned"
     // Переключатели, которые по умолчанию выключены.
-    static let defaultOffKeys: Set<String> = [silentSendKey]
+    static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey]
 
     // Действующее значение: при бане всегда выключено.
     public static func value(_ key: String) -> Bool {
@@ -80,6 +81,11 @@ public enum AyGrammSettings {
     // Исходящие сообщения уходят без звука уведомления у получателя.
     public static var silentSend: Bool {
         return value(silentSendKey)
+    }
+
+    // Свёрнутый AyGramm держит соединение с Telegram, чтобы приходили звонки и сообщения.
+    public static var keepAlive: Bool {
+        return value(keepAliveKey)
     }
 
     // Номер версии AyGramm: номер сборки на GitHub. CFBundleVersion = номер сборки × 100.
