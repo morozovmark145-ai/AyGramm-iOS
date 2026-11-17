@@ -13,6 +13,12 @@ public enum AyGrammSettings {
     public static let pluginsEnabledKey = "AyGrammPluginsEnabled"
     public static let silentSendKey = "AyGrammSilentSend"
     public static let keepAliveKey = "AyGrammKeepAlive"
+    // Встроенные плагины.
+    public static let keepAliveBatteryKey = "AyGrammKeepAliveBattery"
+    public static let unlimitedAccountsKey = "AyGrammUnlimitedAccounts"
+    public static let decorationsKey = "AyGrammDecorationsEnabled"
+    public static let tokensKey = "AyGrammTokens"
+    public static let readAloudKey = "AyGrammReadAloud"
     static let bannedKey = "AyGrammBanned"
     // Переключатели, которые по умолчанию выключены.
     static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey]
@@ -86,6 +92,42 @@ public enum AyGrammSettings {
     // Свёрнутый AyGramm держит соединение с Telegram, чтобы приходили звонки и сообщения.
     public static var keepAlive: Bool {
         return value(keepAliveKey)
+    }
+
+    // Лимит аккаунтов 1000 вместо 3, с Premium вместо 4.
+    public static var unlimitedAccounts: Bool {
+        return value(unlimitedAccountsKey)
+    }
+
+    // MARK: - Профили настроек «Работа» и «Дом»
+
+    // Все переключатели AyGramm, которые сохраняет профиль.
+    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey]
+
+    static func profileStorageKey(_ name: String) -> String {
+        return "AyGrammProfile." + name
+    }
+
+    public static func hasProfile(_ name: String) -> Bool {
+        return UserDefaults.standard.dictionary(forKey: profileStorageKey(name)) != nil
+    }
+
+    public static func saveProfile(_ name: String) {
+        var values: [String: Bool] = [:]
+        for key in profileKeys {
+            values[key] = storedValue(key)
+        }
+        UserDefaults.standard.set(values, forKey: profileStorageKey(name))
+    }
+
+    public static func applyProfile(_ name: String) -> Bool {
+        guard let values = UserDefaults.standard.dictionary(forKey: profileStorageKey(name)) as? [String: Bool] else {
+            return false
+        }
+        for (key, value) in values {
+            setValue(key, value)
+        }
+        return true
     }
 
     // Номер версии AyGramm: номер сборки на GitHub. CFBundleVersion = номер сборки × 100.
