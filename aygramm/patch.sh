@@ -62,30 +62,6 @@ perl -pi -e 's#(let maybeAppGroupUrl = FileManager\.default\.containerURL\(forSe
 grep -n "let maybeAppGroupUrl" "$DELEGATE"
 grep -q "documentDirectory" <(grep -n "let maybeAppGroupUrl" "$DELEGATE")
 
-echo "== Режим призрака"
-# Включён, пока в UserDefaults нет ключа AyGrammGhostMode = false.
-# Сервер не получает: статус «в сети», отметки о прочтении, «печатает…», просмотры историй.
-GHOST='(UserDefaults.standard.object(forKey: "AyGrammGhostMode") as? Bool ?? true)'
-export GHOST
-S=submodules/TelegramCore/Sources/State
-
-# Статус: вместо «в сети» всегда отправляется «не в сети».
-perl -pi -e 's/updateStatus\(offline: \.boolFalse\)/updateStatus(offline: $ENV{GHOST} ? .boolTrue : .boolFalse)/' $S/ManagedAccountPresence.swift
-test "$(grep -c 'AyGrammGhostMode' $S/ManagedAccountPresence.swift)" = 1
-
-# «Печатает…»: запрос не отправляется.
-perl -pi -e 's/^(\s*)(return network\.request\(Api\.functions\.messages\.(setTyping|setEncryptedTyping)\()/$1if $ENV{GHOST} { return .complete() }\n$1$2/' $S/ManagedLocalInputActivities.swift
-test "$(grep -c 'AyGrammGhostMode' $S/ManagedLocalInputActivities.swift)" = 2
-
-# Прочтение: состояние считается отправленным, но запрос на сервер не уходит.
-perl -pi -e 's/^(\s*)((?:var pushSignal: Signal<Void, NoError> = |return )network\.request\(Api\.functions\.(?:channels\.readHistory|messages\.readHistory|messages\.readEncryptedHistory)\()/$1if $ENV{GHOST} { return .single(readState) }\n$1$2/' $S/SynchronizePeerReadState.swift
-test "$(grep -c 'AyGrammGhostMode' $S/SynchronizePeerReadState.swift)" = 3
-
-# Истории: просмотр не отправляется.
-perl -pi -e 's/^(\s*)(return network\.request\(Api\.functions\.stories\.readStories\()/$1if $ENV{GHOST} { return .complete() }\n$1$2/' $S/ManagedSynchronizeViewStoriesOperations.swift
-test "$(grep -c 'AyGrammGhostMode' $S/ManagedSynchronizeViewStoriesOperations.swift)" = 1
-grep -rn "AyGrammGhostMode" $S | cut -c1-160
-
 echo "== Без iCloud"
 # Telegram при запуске читает запасной адрес сервера из iCloud (CKContainer.default()).
 # После подписи в KSign у приложения нет права на iCloud, и CloudKit аварийно закрывает приложение.
@@ -96,16 +72,12 @@ perl -pi -e 's/^(\s*)(let container = CKContainer\.default\(\))$/$1if Bundle.mai
 grep -n -B5 "CKContainer.default" "$CD"
 test "$(grep -c 'AyGrammCloudKit' "$CD")" = 1
 
-echo "== Канал AyGramm в настройках"
-# Первый пункт в разделе поддержки открывает канал @augrammipa внутри приложения.
-SI=submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
-perl -pi -e 's/^(\s*)(items\[\.support\]!\.append\(PeerInfoScreenDisclosureItem\(id: 0, text: presentationData\.strings\.Settings_Support,)/$1items[.support]!.append(PeerInfoScreenDisclosureItem(id: 100, text: "Канал AyGramm", icon: PresentationResourcesSettings.faq, action: {\n$1    interaction.openPeerMention("augrammipa", .default)\n$1}))\n$1$2/' "$SI"
-grep -n -A3 '"Канал AyGramm"' "$SI"
-test "$(grep -c 'augrammipa' "$SI")" = 1
-
 echo "== Без Siri"
 # После подписи в KSign у приложения нет права на Siri, и любой вызов INPreferences бросает исключение.
 # Проверка статуса уже зависит от enable_siri в конфигурации, запрос разрешения тоже ставится за эту проверку.
 perl -pi -e 's/^(\s*)(\}, requestSiriAuthorization: \{ completion in)$/$1$2\n$1    if !buildConfig.isSiriEnabled { completion(false); return }/' "$DELEGATE"
 grep -n -A2 "requestSiriAuthorization: { completion in" "$DELEGATE"
 grep -q "if !buildConfig.isSiriEnabled { completion(false); return }" "$DELEGATE"
+
+echo "== Режим призрака, удалённые сообщения, меню AyGramm"
+python3 aygramm/features.py "$ROOT"
