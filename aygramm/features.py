@@ -53,6 +53,7 @@ for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
+shutil.copy(ROOT / "aygramm/AyGrammBuiltinController.swift", ROOT / PEER / "AyGrammBuiltinController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
 shutil.copy(ROOT / "aygramm/AyGrammKeepAlive.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammKeepAlive.swift")
 
@@ -226,11 +227,12 @@ replace(f"{PEER}/PeerInfoScreenSettingsActions.swift",
 for rel in [f"{PEER}/PeerInfoScreenSettingsActions.swift",
             "submodules/SettingsUI/Sources/LogoutOptionsController.swift",
             "submodules/SettingsUI/Sources/DeleteAccountOptionsController.swift"]:
-    replace(rel, "var maximumAvailableAccounts: Int = 3", "var maximumAvailableAccounts: Int = 1000")
-    replace(rel, "maximumAvailableAccounts = 4\n", "maximumAvailableAccounts = 1000\n", 2)
+    replace(rel, "var maximumAvailableAccounts: Int = 3", "var maximumAvailableAccounts: Int = AyGrammSettings.unlimitedAccounts ? 1000 : 3")
+    replace(rel, "maximumAvailableAccounts = 4\n", "maximumAvailableAccounts = AyGrammSettings.unlimitedAccounts ? 1000 : 4\n", 2)
 replace("submodules/AccountUtils/Sources/AccountUtils.swift",
         "public let maximumNumberOfAccounts = 3\npublic let maximumPremiumNumberOfAccounts = 4\n",
-        "public let maximumNumberOfAccounts = 1000\npublic let maximumPremiumNumberOfAccounts = 1000\n")
+        "public var maximumNumberOfAccounts: Int {\n    return AyGrammSettings.unlimitedAccounts ? 1000 : 3\n}\n"
+        "public var maximumPremiumNumberOfAccounts: Int {\n    return AyGrammSettings.unlimitedAccounts ? 1000 : 4\n}\n")
 
 # «Звонки в фоне»: свёрнутый AyGramm играет тишину и держит соединение всех аккаунтов.
 WAKE = "submodules/TelegramUI/Sources/SharedWakeupManager.swift"
@@ -293,6 +295,20 @@ replace(GLIST, "                                guard let self, !isAdded, let pr
         "                                    self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: AyGrammDecorations.marker, timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
         "                                    return\n"
         "                                }\n")
+# Встроенный плагин «Прочитать вслух» в меню сообщения.
+replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n",
+        "        if AyGrammSettings.value(AyGrammSettings.readAloudKey) && !message.text.isEmpty {\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"Прочитать вслух\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Unmute\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { c, _ in\n"
+        "                c?.dismiss(completion: {\n"
+        "                    AyGrammSpeech.shared.speak(message.text)\n"
+        "                })\n"
+        "            })))\n"
+        "        }\n"
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n")
+
 replace(GLIST, "(self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }",
         "(self.starsProducts ?? []).filter { !AyGrammDecorations.isDecoration($0) }.map { .profileGift(self.peerId, $0) }")
 replace(GLIST, "let index = self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0",
