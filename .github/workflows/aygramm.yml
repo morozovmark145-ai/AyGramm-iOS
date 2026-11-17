@@ -73,10 +73,22 @@ jobs:
           # Bazel кладёт готовый файл по ссылке bazel-bin/Telegram/Telegram.ipa.
           # Свой Bundle ID com.personal.aygramm, чтобы AyGramm ставился рядом с официальным Telegram.
           python3 "$GITHUB_WORKSPACE/aygramm/rebundle.py" bazel-bin/Telegram/Telegram.ipa "$GITHUB_WORKSPACE/out/AyGramm.ipa"
+          # AyGramm-lite.ipa: без расширений (виджет, «Поделиться», Siri, уведомления), ставится через KSign надёжнее.
+          python3 - "$GITHUB_WORKSPACE/out/AyGramm.ipa" "$GITHUB_WORKSPACE/out/AyGramm-lite.ipa" <<'PY'
+          import sys, zipfile
+          src, dst = sys.argv[1], sys.argv[2]
+          with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+              for item in zin.infolist():
+                  if item.filename.startswith(("Payload/Telegram.app/PlugIns/", "Payload/Telegram.app/_CodeSignature/")):
+                      continue
+                  zout.writestr(item, zin.read(item.filename))
+          PY
           ls -la "$GITHUB_WORKSPACE/out"
 
       - uses: actions/upload-artifact@v4
         with:
           name: AyGramm-ipa
-          path: out/AyGramm.ipa
+          path: |
+            out/AyGramm.ipa
+            out/AyGramm-lite.ipa
           retention-days: 30
