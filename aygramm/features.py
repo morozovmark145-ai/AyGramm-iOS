@@ -49,7 +49,7 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift"]:
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift"]:
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
@@ -70,7 +70,8 @@ replace(f"{CORE}/State/Sync/StateReplay+Messages.swift",
 replace(f"{CORE}/PendingMessages/EnqueueMessage.swift",
         "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n",
         "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
-        "    let messages = ayGrammTransformOutgoing(messages)\n")
+        "    let messages = ayGrammTransformOutgoing(messages)\n"
+        "    ayGrammAfterSend(account: account)\n")
 
 # Удалённое сообщение полупрозрачное; переход в это состояние плавный, 0.4 с.
 replace("submodules/TelegramUI/Components/Chat/ChatMessageItemView/Sources/ChatMessageItemView.swift",
@@ -98,6 +99,18 @@ replace("submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sour
 # «История изменений» в меню сообщения по долгому нажатию.
 replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
         "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n",
+        "        if AyGrammSettings.hideRead && message.flags.contains(.Incoming) && message.id.namespace == Namespaces.Message.Cloud {\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"Отправить прочтение\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Read\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { c, _ in\n"
+        "                c?.dismiss(completion: {\n"
+        "                    let _ = (ayGrammSendReadReceipt(account: context.account, peerId: message.id.peerId, maxId: message.id.id)\n"
+        "                    |> deliverOnMainQueue).start(next: { success in\n"
+        "                        controllerInteraction.displayUndo(.info(title: nil, text: success ? \"Прочтение отправлено\" : \"Не удалось отправить прочтение\", timeout: nil, customUndoText: nil))\n"
+        "                    })\n"
+        "                })\n"
+        "            })))\n"
+        "        }\n"
         "        if let ayGrammHistoryText = ayGrammEditHistoryDescription(message) {\n"
         "            actions.append(.action(ContextMenuActionItem(text: \"История изменений\", icon: { theme in\n"
         "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
