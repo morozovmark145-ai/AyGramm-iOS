@@ -15,6 +15,17 @@ public struct AyGrammPlugin: Equatable {
     public let sourceUrl: String
 }
 
+public struct AyGrammCustomPlugin: Equatable {
+    public let id: String
+    public let name: String
+}
+
+public enum AyGrammCustomPluginResult {
+    case installed(String)
+    case invalid
+    case downloadFailed
+}
+
 public enum AyGrammPlugins {
     public static let catalogPageUrl = "https://github.com/morozovmark145-ai/AyGramm-iOS/tree/master/aygramm/plugins"
     static let catalogUrl = "https://raw.githubusercontent.com/morozovmark145-ai/AyGramm-iOS/master/aygramm/plugins/index.json"
@@ -95,6 +106,101 @@ public enum AyGrammPlugins {
             seen.append(id)
         }
         UserDefaults.standard.set(seen, forKey: seenKey)
+    }
+
+    // MARK: - Свои плагины
+
+    // Свои плагины: id → название. Файл лежит рядом с плагинами каталога, включение — через installedIds.
+    static let customKey = "AyGrammCustomPlugins"
+
+    public static var customPlugins: [AyGrammCustomPlugin] {
+        let names = UserDefaults.standard.dictionary(forKey: customKey) as? [String: String] ?? [:]
+        return names.keys.sorted().map { AyGrammCustomPlugin(id: $0, name: names[$0] ?? $0) }
+    }
+
+    // Код считается плагином, если выполняется без ошибки и объявляет функцию onOutgoingText.
+    static func isValidScript(_ code: String) -> Bool {
+        guard code.contains("onOutgoingText"), let context = JSContext() else {
+            return false
+        }
+        _ = context.evaluateScript(code)
+        if context.exception != nil {
+            return false
+        }
+        guard let function = context.objectForKeyedSubscript("onOutgoingText"), !function.isUndefined else {
+            return false
+        }
+        return true
+    }
+
+    // Название из первой строки-комментария: «// Мой плагин».
+    static func scriptName(_ code: String) -> String? {
+        for line in code.split(separator: "\n").prefix(5) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("//") {
+                let name = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty {
+                    return String(name.prefix(40))
+                }
+            }
+        }
+        return nil
+    }
+
+    // Добавляет свой плагин из текста буфера обмена: это либо код, либо ссылка на файл .js.
+    public static func addCustom(from clipboard: String) -> Signal<AyGrammCustomPluginResult, NoError> {
+        return Signal { subscriber in
+            Queue.concurrentDefaultQueue().async {
+                var code = clipboard.trimmingCharacters(in: .whitespacesAndNewlines)
+                if code.hasPrefix("https://") || code.hasPrefix("http://") {
+                    if let url = URL(string: code), let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {
+                        code = text
+                    } else {
+                        subscriber.putNext(.downloadFailed)
+                        subscriber.putCompletion()
+                        return
+                    }
+                }
+                if !isValidScript(code) {
+                    subscriber.putNext(.invalid)
+                    subscriber.putCompletion()
+                    return
+                }
+                let id = "custom-\(Int(Date().timeIntervalSince1970))"
+                let name = scriptName(code) ?? "Мой плагин"
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+                guard (try? code.write(to: fileUrl(id: id), atomically: true, encoding: .utf8)) != nil else {
+                    subscriber.putNext(.invalid)
+                    subscriber.putCompletion()
+                    return
+                }
+                var names = UserDefaults.standard.dictionary(forKey: customKey) as? [String: String] ?? [:]
+                names[id] = name
+                UserDefaults.standard.set(names, forKey: customKey)
+                setEnabled(id: id, enabled: true)
+                subscriber.putNext(.installed(name))
+                subscriber.putCompletion()
+            }
+            return EmptyDisposable
+        }
+    }
+
+    public static func setEnabled(id: String, enabled: Bool) {
+        var ids = installedIds.filter { $0 != id }
+        if enabled {
+            ids.append(id)
+        }
+        UserDefaults.standard.set(ids, forKey: installedKey)
+    }
+
+    // Удаляет все свои плагины, которые сейчас выключены.
+    public static func removeDisabledCustom() {
+        var names = UserDefaults.standard.dictionary(forKey: customKey) as? [String: String] ?? [:]
+        for id in names.keys where !installedIds.contains(id) {
+            try? FileManager.default.removeItem(at: fileUrl(id: id))
+            names[id] = nil
+        }
+        UserDefaults.standard.set(names, forKey: customKey)
     }
 
     // Пропускает текст через все включённые плагины по порядку установки.
