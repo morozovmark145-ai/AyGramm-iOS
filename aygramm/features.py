@@ -248,7 +248,7 @@ replace("submodules/TelegramUI/Sources/ApplicationContext.swift",
         "            if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {\n",
         "            if UIApplication.shared.applicationState != .active {\n"
         "                for (messages, _, notify, _) in messageList where notify {\n"
-        "                    AyGrammKeepAlive.notify(messages: messages)\n"
+        "                    AyGrammKeepAlive.notify(messages: messages.map { EngineMessage($0) })\n"
         "                }\n"
         "            }\n"
         "            if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {\n")
