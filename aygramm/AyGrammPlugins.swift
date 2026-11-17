@@ -222,28 +222,44 @@ public enum AyGrammPlugins {
     }
 }
 
-// Исходящие текстовые сообщения без форматирования проходят через плагины перед отправкой.
-// Сообщения с форматированием не меняются: новый текст сдвинул бы диапазоны жирного шрифта и ссылок.
+// Исходящие сообщения перед отправкой:
+// 1. текст без форматирования проходит через плагины (с форматированием не меняется: новый текст
+//    сдвинул бы диапазоны жирного шрифта и ссылок);
+// 2. при «Тихой отправке» сообщение получает флаг «без звука».
 func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] {
-    if !AyGrammSettings.pluginsEnabled || AyGrammPlugins.installedIds.isEmpty {
+    let usePlugins = AyGrammSettings.pluginsEnabled && !AyGrammPlugins.installedIds.isEmpty
+    let silent = AyGrammSettings.silentSend
+    if !usePlugins && !silent {
         return messages
     }
     return messages.map { message -> EnqueueMessage in
         switch message {
         case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
-            if text.isEmpty {
-                return message
-            }
+            var updatedText = text
+            var updatedAttributes = attributes
+            var hasEntities = false
+            var hasNotificationInfo = false
             for attribute in attributes {
                 if let attribute = attribute as? TextEntitiesMessageAttribute, !attribute.entities.isEmpty {
-                    return message
+                    hasEntities = true
+                }
+                if attribute is NotificationInfoMessageAttribute {
+                    hasNotificationInfo = true
                 }
             }
-            let updatedText = AyGrammPlugins.transformOutgoingText(text)
-            if updatedText == text || updatedText.isEmpty {
+            if usePlugins && !text.isEmpty && !hasEntities {
+                let transformed = AyGrammPlugins.transformOutgoingText(text)
+                if !transformed.isEmpty {
+                    updatedText = transformed
+                }
+            }
+            if silent && !hasNotificationInfo {
+                updatedAttributes.append(NotificationInfoMessageAttribute(flags: .muted))
+            }
+            if updatedText == text && updatedAttributes.count == attributes.count {
                 return message
             }
-            return .message(text: updatedText, attributes: attributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: threadId, replyToMessageId: replyToMessageId, replyToStoryId: replyToStoryId, localGroupingKey: localGroupingKey, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets)
+            return .message(text: updatedText, attributes: updatedAttributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: threadId, replyToMessageId: replyToMessageId, replyToStoryId: replyToStoryId, localGroupingKey: localGroupingKey, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets)
         case .forward:
             return message
         }
