@@ -102,3 +102,10 @@ SI=submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSett
 perl -pi -e 's/^(\s*)(items\[\.support\]!\.append\(PeerInfoScreenDisclosureItem\(id: 0, text: presentationData\.strings\.Settings_Support,)/$1items[.support]!.append(PeerInfoScreenDisclosureItem(id: 100, text: "Канал AyGramm", icon: PresentationResourcesSettings.faq, action: {\n$1    interaction.openPeerMention("augrammipa", .default)\n$1}))\n$1$2/' "$SI"
 grep -n -A3 '"Канал AyGramm"' "$SI"
 test "$(grep -c 'augrammipa' "$SI")" = 1
+
+echo "== Без Siri"
+# После подписи в KSign у приложения нет права на Siri, и любой вызов INPreferences бросает исключение.
+# Проверка статуса уже зависит от enable_siri в конфигурации, запрос разрешения тоже ставится за эту проверку.
+perl -pi -e 's/^(\s*)(\}, requestSiriAuthorization: \{ completion in)$/$1$2\n$1    if !buildConfig.isSiriEnabled { completion(false); return }/' "$DELEGATE"
+grep -n -A2 "requestSiriAuthorization: { completion in" "$DELEGATE"
+grep -q "if !buildConfig.isSiriEnabled { completion(false); return }" "$DELEGATE"
