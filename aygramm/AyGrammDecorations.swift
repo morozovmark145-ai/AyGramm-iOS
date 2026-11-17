@@ -47,8 +47,13 @@ public enum AyGrammDecorations {
         notifyUpdated()
     }
 
+    // Встроенный плагин «Украшения профиля» включён.
+    public static var enabled: Bool {
+        return AyGrammSettings.value(AyGrammSettings.decorationsKey)
+    }
+
     public static var hasGifts: Bool {
-        return !gifts().isEmpty
+        return enabled && !gifts().isEmpty
     }
 
     public static func items() -> [AyGrammDecorationItem] {
@@ -171,6 +176,9 @@ public enum AyGrammDecorations {
 
 // Профиль своего аккаунта: украшения стоят перед настоящими подарками.
 func ayGrammWithDecorations(_ state: ProfileGiftsContext.State) -> ProfileGiftsContext.State {
+    if !AyGrammDecorations.enabled {
+        return state
+    }
     let local = AyGrammDecorations.gifts()
     if local.isEmpty {
         return state
