@@ -190,6 +190,17 @@ replace(REPLAY,
         "            }\n"
         "        }\n")
 
+# Группы и каналы: при сверке истории с сервером Telegram удаляет пропавшие сообщения напрямую,
+# без уведомления об удалении. С «Сохранять удалённые» они тоже остаются с меткой.
+replace(f"{CORE}/State/StoredMessageConfirmation.swift",
+        "func deleteStoredMessagesAsReceivedDeletion(transaction: Transaction, mediaBox: MediaBox, ids: [MessageId]) -> [MessageId] {\n",
+        "func deleteStoredMessagesAsReceivedDeletion(transaction: Transaction, mediaBox: MediaBox, ids: [MessageId]) -> [MessageId] {\n"
+        "    var ids = ids\n"
+        "    if AyGrammSettings.saveDeleted {\n"
+        "        ayGrammMarkMessagesDeleted(transaction: transaction, ids: ids.filter { $0.namespace == Namespaces.Message.Cloud })\n"
+        "        ids = ids.filter { $0.namespace != Namespaces.Message.Cloud }\n"
+        "    }\n")
+
 # Меню AyGramm: первый пункт в блоке «Избранное, Звонки, Устройства». Пункт «Возможности Telegram»
 # убирается, его раздел .tips открывает меню AyGramm.
 ITEMS = f"{PEER}/PeerInfoSettingsItems.swift"
