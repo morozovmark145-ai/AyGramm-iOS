@@ -289,9 +289,15 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
 
 private final class AyGrammPluginsControllerArguments {
     let toggle: (AyGrammPlugin, Bool) -> Void
+    let toggleCustom: (AyGrammCustomPlugin, Bool) -> Void
+    let addCustom: () -> Void
+    let removeDisabledCustom: () -> Void
 
-    init(toggle: @escaping (AyGrammPlugin, Bool) -> Void) {
+    init(toggle: @escaping (AyGrammPlugin, Bool) -> Void, toggleCustom: @escaping (AyGrammCustomPlugin, Bool) -> Void, addCustom: @escaping () -> Void, removeDisabledCustom: @escaping () -> Void) {
         self.toggle = toggle
+        self.toggleCustom = toggleCustom
+        self.addCustom = addCustom
+        self.removeDisabledCustom = removeDisabledCustom
     }
 }
 
@@ -300,9 +306,19 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
     case status(String)
     case plugin(Int32, AyGrammPlugin, Bool)
     case footer
+    case customHeader
+    case custom(Int32, AyGrammCustomPlugin, Bool)
+    case addCustom
+    case removeDisabled
+    case customFooter
 
     var section: ItemListSectionId {
-        return 0
+        switch self {
+        case .header, .status, .plugin, .footer:
+            return 0
+        case .customHeader, .custom, .addCustom, .removeDisabled, .customFooter:
+            return 1
+        }
     }
 
     var stableId: Int32 {
@@ -314,7 +330,17 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
         case let .plugin(index, _, _):
             return 2 + index
         case .footer:
-            return 100000
+            return 999
+        case .customHeader:
+            return 5000
+        case let .custom(index, _, _):
+            return 5100 + index
+        case .addCustom:
+            return 5900
+        case .removeDisabled:
+            return 5901
+        case .customFooter:
+            return 6000
         }
     }
 
@@ -335,6 +361,22 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
             })
         case .footer:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Исходный код каждого плагина открыт: " + AyGrammPlugins.catalogPageUrl + ". Плагин меняет только текст исходящего сообщения без форматирования и работает без доступа к сети."), sectionId: self.section)
+        case .customHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "МОИ ПЛАГИНЫ", sectionId: self.section)
+        case let .custom(_, plugin, enabled):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: plugin.name, value: enabled, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleCustom(plugin, value)
+            })
+        case .addCustom:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.addCustom()
+            })
+        case .removeDisabled:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Удалить выключенные", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.removeDisabledCustom()
+            })
+        case .customFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Скопируйте код плагина или ссылку на файл .js и нажмите «Добавить из буфера обмена». Плагин — это JavaScript с функцией onOutgoingText(text), она возвращает новый текст сообщения. Первая строка «// Название» станет названием плагина. Ставьте только плагины, которым доверяете: плагин может менять ваши исходящие сообщения."), sectionId: self.section)
         }
     }
 }
@@ -342,7 +384,15 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
 private func ayGrammPluginsController(context: AccountContext) -> ViewController {
     let catalogPromise = ValuePromise<[AyGrammPlugin]?>(nil, ignoreRepeated: true)
     let installedPromise = ValuePromise<[String]>(AyGrammPlugins.installedIds, ignoreRepeated: true)
+    let customPromise = ValuePromise<[AyGrammCustomPlugin]>(AyGrammPlugins.customPlugins, ignoreRepeated: true)
     let actionsDisposable = DisposableSet()
+
+    var presentControllerImpl: ((ViewController) -> Void)?
+
+    let showMessage: (String) -> Void = { text in
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        presentControllerImpl?(textAlertController(context: context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+    }
 
     let arguments = AyGrammPluginsControllerArguments(toggle: { plugin, value in
         if value {
@@ -354,6 +404,30 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
             AyGrammPlugins.uninstall(id: plugin.id)
             installedPromise.set(AyGrammPlugins.installedIds)
         }
+    }, toggleCustom: { plugin, value in
+        AyGrammPlugins.setEnabled(id: plugin.id, enabled: value)
+        installedPromise.set(AyGrammPlugins.installedIds)
+    }, addCustom: {
+        guard let clipboard = UIPasteboard.general.string, !clipboard.isEmpty else {
+            showMessage("Буфер обмена пуст. Скопируйте код плагина или ссылку на файл .js.")
+            return
+        }
+        actionsDisposable.add((AyGrammPlugins.addCustom(from: clipboard)
+        |> deliverOnMainQueue).start(next: { result in
+            switch result {
+            case let .installed(name):
+                showMessage("Плагин «\(name)» добавлен и включён.")
+            case .invalid:
+                showMessage("Это не плагин AyGramm: в коде нет функции onOutgoingText или он выполняется с ошибкой.")
+            case .downloadFailed:
+                showMessage("Не удалось скачать файл по ссылке.")
+            }
+            customPromise.set(AyGrammPlugins.customPlugins)
+            installedPromise.set(AyGrammPlugins.installedIds)
+        }))
+    }, removeDisabledCustom: {
+        AyGrammPlugins.removeDisabledCustom()
+        customPromise.set(AyGrammPlugins.customPlugins)
     })
 
     actionsDisposable.add((AyGrammPlugins.catalog()
@@ -365,9 +439,10 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
     let signal = combineLatest(queue: .mainQueue(),
         context.sharedContext.presentationData,
         catalogPromise.get(),
-        installedPromise.get()
+        installedPromise.get(),
+        customPromise.get()
     )
-    |> map { presentationData, catalog, installed -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, catalog, installed, custom -> (ItemListControllerState, (ItemListNodeState, Any)) in
         var entries: [AyGrammPluginsEntry] = [.header]
         if let catalog = catalog {
             if catalog.isEmpty {
@@ -380,6 +455,15 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
             entries.append(.status("Загрузка каталога…"))
         }
         entries.append(.footer)
+        entries.append(.customHeader)
+        for (index, plugin) in custom.enumerated() {
+            entries.append(.custom(Int32(index), plugin, installed.contains(plugin.id)))
+        }
+        entries.append(.addCustom)
+        if custom.contains(where: { !installed.contains($0.id) }) {
+            entries.append(.removeDisabled)
+        }
+        entries.append(.customFooter)
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Плагины"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: true)
         return (controllerState, (listState, arguments))
@@ -388,7 +472,11 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
         actionsDisposable.dispose()
     }
 
-    return ItemListController(context: context, state: signal)
+    let controller = ItemListController(context: context, state: signal)
+    presentControllerImpl = { [weak controller] c in
+        controller?.present(c, in: .window(.root))
+    }
+    return controller
 }
 
 // MARK: - Админ-панель
