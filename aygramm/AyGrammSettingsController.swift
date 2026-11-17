@@ -39,6 +39,7 @@ private enum AyGrammSettingsSection: Int32 {
     case plugins
     case community
     case admin
+    case background
 }
 
 private struct AyGrammSettingsState: Equatable {
@@ -46,7 +47,7 @@ private struct AyGrammSettingsState: Equatable {
 
     static func current() -> AyGrammSettingsState {
         var values: [String: Bool] = [:]
-        for key in [AyGrammSettings.hideOnlineKey, AyGrammSettings.hideReadKey, AyGrammSettings.hideTypingKey, AyGrammSettings.hideStoryViewsKey, AyGrammSettings.saveDeletedKey, AyGrammSettings.saveEditsKey, AyGrammSettings.silentSendKey, AyGrammSettings.pluginsEnabledKey] {
+        for key in [AyGrammSettings.hideOnlineKey, AyGrammSettings.hideReadKey, AyGrammSettings.hideTypingKey, AyGrammSettings.hideStoryViewsKey, AyGrammSettings.saveDeletedKey, AyGrammSettings.saveEditsKey, AyGrammSettings.silentSendKey, AyGrammSettings.pluginsEnabledKey, AyGrammSettings.keepAliveKey] {
             values[key] = AyGrammSettings.storedValue(key)
         }
         return AyGrammSettingsState(values: values)
@@ -76,6 +77,8 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
     case communityFooter
     case adminHeader
     case admin
+    case backgroundHeader
+    case backgroundFooter
 
     var section: ItemListSectionId {
         switch self {
@@ -93,10 +96,12 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return AyGrammSettingsSection.community.rawValue
         case .adminHeader, .admin:
             return AyGrammSettingsSection.admin.rawValue
+        case .backgroundHeader, .backgroundFooter:
+            return AyGrammSettingsSection.background.rawValue
         }
     }
 
-    // Порядок: бан 0, призрак 10–19, сообщения 20–29, плагины 30–39, сообщество 40–49, автор 50–59.
+    // Порядок: бан 0, звонки в фоне 1–9, призрак 10–19, сообщения 20–29, плагины 30–39, сообщество 40–49, автор 50–59.
     var stableId: Int32 {
         switch self {
         case .bannedInfo:
@@ -135,6 +140,10 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return 50
         case .admin:
             return 51
+        case .backgroundHeader:
+            return 1
+        case .backgroundFooter:
+            return 9
         }
     }
 
@@ -191,6 +200,10 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(AyGrammCommunity.consentText + " Счётчик скачиваний открытый: это число скачиваний файла на GitHub."), sectionId: self.section)
         case .adminHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "АВТОР", sectionId: self.section)
+        case .backgroundHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЗВОНКИ И УВЕДОМЛЕНИЯ", sectionId: self.section)
+        case .backgroundFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Push-уведомления Telegram не доходят до переподписанного AyGramm, поэтому свёрнутый AyGramm засыпает. С этим режимом он держит связь с Telegram в фоне: звонки приходят на экран вызова iOS, о сообщениях приходит уведомление. Батарея садится быстрее. Если смахнуть AyGramm из списка приложений, режим выключится до следующего запуска."), sectionId: self.section)
         case .admin:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Админ-панель", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openAdmin()
@@ -204,6 +217,9 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
     if isBanned {
         entries.append(.bannedInfo)
     }
+    entries.append(.backgroundHeader)
+    entries.append(.toggle(2, .background, AyGrammSettings.keepAliveKey, "Звонки в фоне", state.value(AyGrammSettings.keepAliveKey)))
+    entries.append(.backgroundFooter)
     entries.append(.ghostHeader)
     entries.append(.toggle(11, .ghost, AyGrammSettings.hideOnlineKey, "Не отправлять «в сети»", state.value(AyGrammSettings.hideOnlineKey)))
     entries.append(.toggle(12, .ghost, AyGrammSettings.hideReadKey, "Не отправлять прочтение", state.value(AyGrammSettings.hideReadKey)))
