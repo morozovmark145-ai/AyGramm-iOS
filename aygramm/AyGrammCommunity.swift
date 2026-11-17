@@ -6,6 +6,11 @@ import SwiftSignalKit
 // Зарегистрированный пользователь = подписчик канала: он сам нажимает «Подписаться», и автор видит его
 // в списке подписчиков, как в любом канале Telegram. Админ = владелец канала, это проверяет сам Telegram.
 // Бан = бан в канале; приложение забаненного видит свой статус и выключает функции AyGramm.
+public struct AyGrammRelease: Equatable {
+    public let version: Int
+    public let url: String
+}
+
 public enum AyGrammCommunity {
     public static let channelUsername = "augrammipa"
     static let releasesUrl = "https://api.github.com/repos/morozovmark145-ai/AyGramm-iOS/releases"
@@ -89,6 +94,32 @@ public enum AyGrammCommunity {
         return engine.peers.updateChannelMemberBannedRights(peerId: channelId, memberId: memberId, rights: rights)
         |> map { _ -> Void in
             return Void()
+        }
+    }
+
+    // Последний релиз на GitHub: номер сборки из названия тега (v0.13-beta → 13) и ссылка на страницу.
+    public static func latestRelease() -> Signal<AyGrammRelease?, NoError> {
+        return Signal { subscriber in
+            Queue.concurrentDefaultQueue().async {
+                var best: AyGrammRelease?
+                if let url = URL(string: releasesUrl), let data = try? Data(contentsOf: url), let releases = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]] {
+                    for release in releases {
+                        guard let tag = release["tag_name"] as? String, let page = release["html_url"] as? String else {
+                            continue
+                        }
+                        let numbers = tag.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+                        guard numbers.count >= 2 else {
+                            continue
+                        }
+                        if best == nil || numbers[1] > best!.version {
+                            best = AyGrammRelease(version: numbers[1], url: page)
+                        }
+                    }
+                }
+                subscriber.putNext(best)
+                subscriber.putCompletion()
+            }
+            return EmptyDisposable
         }
     }
 
