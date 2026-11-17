@@ -50,6 +50,9 @@ jobs:
           cfg = json.load(open("/Users/Shared/telegram-ios/build-system/appstore-configuration.json"))
           cfg["api_id"] = os.environ["API_ID"].strip()
           cfg["api_hash"] = os.environ["API_HASH"].strip()
+          # Права на Siri и iCloud пропадают при подписи в KSign, вызовы этих служб закрывают приложение.
+          cfg["enable_siri"] = False
+          cfg["enable_icloud"] = False
           json.dump(cfg, open("/Users/Shared/aygramm-config.json", "w"), indent=2)
           print("config keys:", sorted(cfg))
           EOF
