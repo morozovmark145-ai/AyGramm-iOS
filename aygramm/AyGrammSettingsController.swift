@@ -16,15 +16,17 @@ private final class AyGrammSettingsControllerArguments {
     let toggle: (String, Bool) -> Void
     let openDeleted: () -> Void
     let openPlugins: () -> Void
+    let openDecorations: () -> Void
     let openChannel: () -> Void
     let joinChannel: () -> Void
     let openUpdate: () -> Void
     let openAdmin: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDeleted: @escaping () -> Void, openPlugins: @escaping () -> Void, openChannel: @escaping () -> Void, joinChannel: @escaping () -> Void, openUpdate: @escaping () -> Void, openAdmin: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDeleted: @escaping () -> Void, openPlugins: @escaping () -> Void, openDecorations: @escaping () -> Void, openChannel: @escaping () -> Void, joinChannel: @escaping () -> Void, openUpdate: @escaping () -> Void, openAdmin: @escaping () -> Void) {
         self.toggle = toggle
         self.openDeleted = openDeleted
         self.openPlugins = openPlugins
+        self.openDecorations = openDecorations
         self.openChannel = openChannel
         self.joinChannel = joinChannel
         self.openUpdate = openUpdate
@@ -68,6 +70,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
     case messagesFooter
     case pluginsHeader
     case plugins
+    case decorations
     case pluginsFooter
     case communityHeader
     case channel
@@ -90,7 +93,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return section.rawValue
         case .messagesHeader, .deleted, .messagesFooter:
             return AyGrammSettingsSection.messages.rawValue
-        case .pluginsHeader, .plugins, .pluginsFooter:
+        case .pluginsHeader, .plugins, .decorations, .pluginsFooter:
             return AyGrammSettingsSection.plugins.rawValue
         case .communityHeader, .channel, .join, .downloads, .version, .communityFooter:
             return AyGrammSettingsSection.community.rawValue
@@ -122,6 +125,8 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return 30
         case .plugins:
             return 32
+        case .decorations:
+            return 33
         case .pluginsFooter:
             return 39
         case .communityHeader:
@@ -177,6 +182,10 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
         case .plugins:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Плагины", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openPlugins()
+            })
+        case .decorations:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Украшения профиля", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.openDecorations()
             })
         case .pluginsFooter:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины из открытого каталога на GitHub и свои: из буфера обмена или из файла .js. Плагин получает только текст вашего исходящего сообщения и не видит переписки."), sectionId: self.section)
@@ -235,6 +244,7 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
     entries.append(.pluginsHeader)
     entries.append(.toggle(31, .plugins, AyGrammSettings.pluginsEnabledKey, "Плагины включены", state.value(AyGrammSettings.pluginsEnabledKey)))
     entries.append(.plugins)
+    entries.append(.decorations)
     entries.append(.pluginsFooter)
     entries.append(.communityHeader)
     entries.append(.channel)
@@ -279,6 +289,9 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
         },
         openPlugins: {
             pushControllerImpl?(ayGrammPluginsController(context: context))
+        },
+        openDecorations: {
+            pushControllerImpl?(ayGrammDecorationsController(context: context))
         },
         openChannel: {
             openChannel()
