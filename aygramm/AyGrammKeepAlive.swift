@@ -1,5 +1,7 @@
 import Foundation
+import UIKit
 import AVFAudio
+import NaturalLanguage
 import UserNotifications
 import TelegramCore
 
@@ -24,7 +26,7 @@ final class AyGrammKeepAlive {
     func update(inForeground: Bool, hasOtherAudio: Bool) {
         self.inForeground = inForeground
         self.hasOtherAudio = hasOtherAudio
-        if !inForeground && !hasOtherAudio && AyGrammSettings.keepAlive {
+        if !inForeground && !hasOtherAudio && AyGrammSettings.keepAlive && !AyGrammKeepAlive.isBatteryLow() {
             self.start()
         } else {
             self.stop()
@@ -68,6 +70,17 @@ final class AyGrammKeepAlive {
             self.player = nil
             player.stop()
         }
+    }
+
+    // Встроенный плагин: при заряде ниже 20% без зарядки фон выключается, чтобы телефон не сел.
+    static func isBatteryLow() -> Bool {
+        guard AyGrammSettings.value(AyGrammSettings.keepAliveBatteryKey) else {
+            return false
+        }
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        let level = device.batteryLevel
+        return level >= 0.0 && level < 0.2 && device.batteryState == .unplugged
     }
 
     // Одна секунда тишины: WAV, 8000 Гц, 16 бит, моно.
@@ -123,5 +136,22 @@ final class AyGrammKeepAlive {
             return message.text
         }
         return message.media.isEmpty ? "Сообщение" : "Медиа"
+    }
+}
+
+// Встроенный плагин «Прочитать вслух»: текст сообщения читает голос iOS на языке сообщения.
+final class AyGrammSpeech {
+    static let shared = AyGrammSpeech()
+    private let synthesizer = AVSpeechSynthesizer()
+
+    func speak(_ text: String) {
+        if self.synthesizer.isSpeaking {
+            self.synthesizer.stopSpeaking(at: .immediate)
+            return
+        }
+        let utterance = AVSpeechUtterance(string: text)
+        let language = NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue ?? "ru"
+        utterance.voice = AVSpeechSynthesisVoice(language: language) ?? AVSpeechSynthesisVoice(language: "ru-RU")
+        self.synthesizer.speak(utterance)
     }
 }
