@@ -1,7 +1,6 @@
 import Foundation
 import AVFAudio
 import UserNotifications
-import Postbox
 import TelegramCore
 
 // «Звонки в фоне». Push-уведомления Telegram приходят только в приложение с подписью Telegram,
@@ -102,12 +101,12 @@ final class AyGrammKeepAlive {
     }
 
     // Уведомление о новом сообщении, пока AyGramm свёрнут и работает «Звонки в фоне».
-    static func notify(messages: [Message]) {
+    static func notify(messages: [EngineMessage]) {
         guard shared.isRunning, let message = messages.first, message.flags.contains(.Incoming) else {
             return
         }
         let content = UNMutableNotificationContent()
-        content.title = message.peers[message.id.peerId]?.debugDisplayTitle ?? "AyGramm"
+        content.title = message.enginePeers[message.id.peerId]?.debugDisplayTitle ?? "AyGramm"
         if let author = message.author, author.id != message.id.peerId {
             content.body = author.debugDisplayTitle + ": " + describe(message)
         } else {
@@ -119,7 +118,7 @@ final class AyGrammKeepAlive {
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 
-    private static func describe(_ message: Message) -> String {
+    private static func describe(_ message: EngineMessage) -> String {
         if !message.text.isEmpty {
             return message.text
         }
