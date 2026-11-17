@@ -11,7 +11,10 @@ public enum AyGrammSettings {
     public static let saveDeletedKey = "AyGrammSaveDeleted"
     public static let saveEditsKey = "AyGrammSaveEdits"
     public static let pluginsEnabledKey = "AyGrammPluginsEnabled"
+    public static let silentSendKey = "AyGrammSilentSend"
     static let bannedKey = "AyGrammBanned"
+    // Переключатели, которые по умолчанию выключены.
+    static let defaultOffKeys: Set<String> = [silentSendKey]
 
     // Действующее значение: при бане всегда выключено.
     public static func value(_ key: String) -> Bool {
@@ -23,7 +26,7 @@ public enum AyGrammSettings {
 
     // Выбор пользователя в меню, без учёта бана.
     public static func storedValue(_ key: String) -> Bool {
-        return UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        return UserDefaults.standard.object(forKey: key) as? Bool ?? !defaultOffKeys.contains(key)
     }
 
     public static func setValue(_ key: String, _ value: Bool) {
@@ -72,6 +75,95 @@ public enum AyGrammSettings {
     // Плагины из каталога меняют текст исходящих сообщений.
     public static var pluginsEnabled: Bool {
         return value(pluginsEnabledKey)
+    }
+
+    // Исходящие сообщения уходят без звука уведомления у получателя.
+    public static var silentSend: Bool {
+        return value(silentSendKey)
+    }
+
+    // Номер версии AyGramm: номер сборки на GitHub. CFBundleVersion = номер сборки × 100.
+    public static var currentVersion: Int {
+        let build = Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0
+        return build / 100
+    }
+}
+
+// Журнал удалённых сообщений для списка в меню AyGramm и для копирования в буфер обмена.
+// Хранится в файле aygramm-deleted.json в папке приложения, последние 1000 записей.
+public struct AyGrammDeletedLogEntry: Equatable {
+    public let date: Int32
+    public let chat: String
+    public let author: String
+    public let text: String
+}
+
+public enum AyGrammDeletedLog {
+    static let lock = NSLock()
+    static let limit = 1000
+
+    static var fileUrl: URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documents.appendingPathComponent("aygramm-deleted.json")
+    }
+
+    static func load() -> [AyGrammDeletedLogEntry] {
+        guard let data = try? Data(contentsOf: fileUrl), let items = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]] else {
+            return []
+        }
+        return items.map { item in
+            return AyGrammDeletedLogEntry(date: Int32(item["d"] as? Int ?? 0), chat: item["c"] as? String ?? "", author: item["a"] as? String ?? "", text: item["t"] as? String ?? "")
+        }
+    }
+
+    static func save(_ entries: [AyGrammDeletedLogEntry]) {
+        let items: [[String: Any]] = entries.map { entry in
+            return ["d": Int(entry.date), "c": entry.chat, "a": entry.author, "t": entry.text]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: items, options: []) {
+            try? data.write(to: fileUrl, options: .atomic)
+        }
+    }
+
+    static func append(_ newEntries: [AyGrammDeletedLogEntry]) {
+        if newEntries.isEmpty {
+            return
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        var entries = load()
+        entries.append(contentsOf: newEntries)
+        if entries.count > limit {
+            entries.removeFirst(entries.count - limit)
+        }
+        save(entries)
+    }
+
+    // Записи от новых к старым.
+    public static func entries() -> [AyGrammDeletedLogEntry] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Array(load().reversed())
+    }
+
+    public static func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        try? FileManager.default.removeItem(at: fileUrl)
+    }
+
+    public static func describe(_ entry: AyGrammDeletedLogEntry) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd.MM.yyyy HH:mm"
+        var header = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(entry.date))) + " · " + entry.chat
+        if !entry.author.isEmpty && entry.author != entry.chat {
+            header += " · " + entry.author
+        }
+        return header + "\n" + entry.text
+    }
+
+    public static func exportText() -> String {
+        return entries().map { describe($0) }.joined(separator: "\n\n")
     }
 }
 
@@ -122,11 +214,18 @@ public extension Message {
 // Вместо удаления сообщение получает метку AyGrammDeletedMessageAttribute. Текст и медиа остаются.
 func ayGrammMarkMessagesDeleted(transaction: Transaction, ids: [MessageId]) {
     let date = Int32(Date().timeIntervalSince1970)
+    var logEntries: [AyGrammDeletedLogEntry] = []
+    defer {
+        AyGrammDeletedLog.append(logEntries)
+    }
     for id in ids {
         transaction.updateMessage(id, update: { currentMessage in
             if currentMessage.ayGrammIsDeleted {
                 return .skip
             }
+            let chat = currentMessage.peers[currentMessage.id.peerId]?.debugDisplayTitle ?? ""
+            let author = currentMessage.author?.debugDisplayTitle ?? ""
+            logEntries.append(AyGrammDeletedLogEntry(date: currentMessage.timestamp, chat: chat, author: author, text: currentMessage.text.isEmpty ? "[медиа]" : currentMessage.text))
             var attributes = currentMessage.attributes
             attributes.append(AyGrammDeletedMessageAttribute(date: date))
             let storeForwardInfo = currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init)
