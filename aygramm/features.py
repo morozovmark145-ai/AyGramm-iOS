@@ -49,7 +49,7 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift"]:
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift"]:
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
