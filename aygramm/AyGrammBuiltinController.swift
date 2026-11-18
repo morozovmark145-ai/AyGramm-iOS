@@ -19,14 +19,16 @@ private final class AyGrammBuiltinArguments {
     let openLog: () -> Void
     let openFonts: () -> Void
     let openVoice: () -> Void
+    let openFilters: () -> Void
     let openCrashLog: () -> Void
     let exportBackup: () -> Void
     let restoreBackup: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void, openFilters: @escaping () -> Void) {
         self.toggle = toggle
         self.openFonts = openFonts
         self.openVoice = openVoice
+        self.openFilters = openFilters
         self.openCrashLog = openCrashLog
         self.exportBackup = exportBackup
         self.restoreBackup = restoreBackup
@@ -43,6 +45,7 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case decorations
     case font(String)
     case voice(String)
+    case filters(Int)
     case profiles
     case log(Int)
     case crashLog(Bool)
@@ -66,6 +69,8 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return 411
         case .voice:
             return 414
+        case .filters:
+            return 416
         case .profiles:
             return 510
         case .log:
@@ -105,6 +110,10 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
         case let .voice(name):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("waveform", AyGrammColor.pink), title: "Изменение голоса", label: name, sectionId: self.section, style: .blocks, action: {
                 arguments.openVoice()
+            })
+        case let .filters(count):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("list.bullet", AyGrammColor.red), title: "Слова и скрытые люди", label: "\(count)", sectionId: self.section, style: .blocks, action: {
+                arguments.openFilters()
             })
         case .profiles:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("slider.horizontal.3", AyGrammColor.gray), title: "Профили настроек", label: "Работа, Дом", sectionId: self.section, style: .blocks, action: {
@@ -204,6 +213,8 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         fontPromise.set(AyGrammFonts.selectedIndex)
         voicePromise.set(AyGrammVoice.selectedIndex)
         showMessage("Настройки, плагины и украшения восстановлены.")
+    }, openFilters: {
+        pushControllerImpl?(ayGrammFiltersController(context: context))
     })
 
     let signal = combineLatest(queue: .mainQueue(),
@@ -235,6 +246,9 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.toggle(412, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
         entries.append(.toggle(413, AyGrammSettings.secondsKey, "Секунды во времени", "Время сообщений с секундами: 14:05:37.", value(AyGrammSettings.secondsKey)))
         entries.append(.voice(AyGrammVoice.effects[voiceIndex].0))
+        entries.append(.toggle(415, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
+        entries.append(.filters(AyGrammFilters.words.count + AyGrammFilters.authors.count))
+        entries.append(.toggle(417, AyGrammSettings.exportKey, "Экспорт чата", "Пункт в меню сообщения: скачанные сообщения чата в файл .txt. Чаты с запретом копирования не экспортируются.", value(AyGrammSettings.exportKey)))
         entries.append(.sectionHeader(500, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
@@ -580,4 +594,140 @@ private func ayGrammVoiceController(context: AccountContext, selected: @escaping
     }
 
     return ItemListController(context: context, state: signal)
+}
+
+// MARK: - Фильтры в группах
+
+private final class AyGrammFiltersArguments {
+    let addWords: () -> Void
+    let removeWord: (String) -> Void
+    let showAuthor: (Int64) -> Void
+
+    init(addWords: @escaping () -> Void, removeWord: @escaping (String) -> Void, showAuthor: @escaping (Int64) -> Void) {
+        self.addWords = addWords
+        self.removeWord = removeWord
+        self.showAuthor = showAuthor
+    }
+}
+
+private enum AyGrammFiltersEntry: ItemListNodeEntry {
+    case wordsHeader
+    case word(Int32, String)
+    case addWords
+    case authorsHeader
+    case author(Int32, Int64, String)
+    case noAuthors
+    case footer
+
+    var section: ItemListSectionId {
+        switch self {
+        case .wordsHeader, .word, .addWords:
+            return 0
+        case .authorsHeader, .author, .noAuthors, .footer:
+            return 1
+        }
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case .wordsHeader:
+            return 0
+        case let .word(index, _):
+            return 1 + index
+        case .addWords:
+            return 99999
+        case .authorsHeader:
+            return 100000
+        case let .author(index, _, _):
+            return 100001 + index
+        case .noAuthors:
+            return 199998
+        case .footer:
+            return 199999
+        }
+    }
+
+    static func <(lhs: AyGrammFiltersEntry, rhs: AyGrammFiltersEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let arguments = arguments as! AyGrammFiltersArguments
+        switch self {
+        case .wordsHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "СЛОВА", sectionId: self.section)
+        case let .word(_, word):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("textformat.abc", AyGrammColor.gray), title: word, label: "удалить", sectionId: self.section, style: .blocks, action: {
+                arguments.removeWord(word)
+            })
+        case .addWords:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("plus", AyGrammColor.green), title: "Добавить слова из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.addWords()
+            })
+        case .authorsHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "СКРЫТЫЕ ЛЮДИ", sectionId: self.section)
+        case let .author(_, id, name):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("person.fill.xmark", AyGrammColor.red), title: name, label: "показать", sectionId: self.section, style: .blocks, action: {
+                arguments.showAuthor(id)
+            })
+        case .noAuthors:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Пока никого. Нажмите на сообщение в группе и выберите «Скрывать сообщения автора»."), sectionId: self.section)
+        case .footer:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Сообщения со словами из списка и сообщения скрытых людей не показываются в группах и каналах. Личные чаты, свои сообщения и реклама Telegram не фильтруются."), sectionId: self.section)
+        }
+    }
+}
+
+private func ayGrammFiltersController(context: AccountContext) -> ViewController {
+    let updatePromise = ValuePromise<Int>(0, ignoreRepeated: false)
+    var counter = 0
+    var presentControllerImpl: ((ViewController) -> Void)?
+    let refresh: () -> Void = {
+        counter += 1
+        updatePromise.set(counter)
+    }
+
+    let arguments = AyGrammFiltersArguments(addWords: {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        let added = AyGrammFilters.addWords(from: UIPasteboard.general.string ?? "")
+        let text = added == 0 ? "Скопируйте слова через запятую или с новой строки, потом нажмите ещё раз." : "Добавлено слов: \(added)."
+        presentControllerImpl?(textAlertController(context: context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+        refresh()
+    }, removeWord: { word in
+        AyGrammFilters.removeWord(word)
+        refresh()
+    }, showAuthor: { id in
+        AyGrammFilters.showAuthor(id: id)
+        refresh()
+    })
+
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        updatePromise.get()
+    )
+    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        var entries: [AyGrammFiltersEntry] = [.wordsHeader]
+        for (index, word) in AyGrammFilters.words.prefix(9000).enumerated() {
+            entries.append(.word(Int32(index), word))
+        }
+        entries.append(.addWords)
+        entries.append(.authorsHeader)
+        let authors = AyGrammFilters.authors
+        if authors.isEmpty {
+            entries.append(.noAuthors)
+        }
+        for (index, author) in authors.prefix(9000).enumerated() {
+            entries.append(.author(Int32(index), author.0, author.1))
+        }
+        entries.append(.footer)
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Фильтры в группах"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, arguments))
+    }
+
+    let controller = ItemListController(context: context, state: signal)
+    presentControllerImpl = { [weak controller] c in
+        controller?.present(c, in: .window(.root))
+    }
+    return controller
 }
