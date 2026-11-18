@@ -73,6 +73,12 @@ func ayGrammKeyIcon(_ key: String) -> UIImage? {
         return ayGrammIcon("curlybraces", AyGrammColor.orange)
     case AyGrammSettings.readAloudKey:
         return ayGrammIcon("speaker.wave.2.fill", AyGrammColor.teal)
+    case AyGrammSettings.secondsKey:
+        return ayGrammIcon("clock.fill", AyGrammColor.orange)
+    case AyGrammSettings.showIdKey:
+        return ayGrammIcon("number", AyGrammColor.blue)
+    case AyGrammSettings.streamerKey:
+        return ayGrammIcon("video.fill", AyGrammColor.red)
     default:
         return ayGrammIcon("gearshape", AyGrammColor.gray)
     }
