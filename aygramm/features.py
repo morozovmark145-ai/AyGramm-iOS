@@ -258,7 +258,7 @@ replace("submodules/TelegramUI/Sources/ApplicationContext.swift",
         "            if let strongSelf = self, let (messages, _, notify, threadData) = messageList.last, let firstMessage = messages.first {\n")
 
 # Украшения: свои подарки видны только на этом телефоне, во вкладке «Подарки» своего профиля,
-# с лентой «украшение» вместо номера. Нажатие показывает, что это украшение.
+# с лентой AyGramm. Нажатие открывает экран подарка Telegram: скрыть, удалить, улучшить со слотами.
 GIFTS = f"{CORE}/TelegramEngine/Payments/StarGifts.swift"
 replace(GIFTS,
         "    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        return Signal { subscriber in\n",
@@ -292,8 +292,22 @@ replace(GLIST, "                let itemReferenceId = product.reference?.stringV
         "                let itemReferenceId = product.reference?.stringValue ?? \"\"\n")
 replace(GLIST, "                                guard let self, !isAdded, let presentationData = self.currentParams?.presentationData else {\n                                    return\n                                }\n",
         "                                guard let self, !isAdded, let presentationData = self.currentParams?.presentationData else {\n                                    return\n                                }\n"
-        "                                if AyGrammDecorations.isDecoration(product) {\n"
-        "                                    self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: AyGrammDecorations.marker, timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
+        "                                if AyGrammDecorations.isDecoration(product) && !self.canSelect && !self.isReordering {\n"
+        "                                    let engine = self.context.engine\n"
+        "                                    let controller = GiftViewScreen(\n"
+        "                                        context: self.context,\n"
+        "                                        subject: .profileGift(self.peerId, product),\n"
+        "                                        updateSavedToProfile: { reference, added in\n"
+        "                                            AyGrammDecorations.setHidden(reference: reference, hidden: !added)\n"
+        "                                        },\n"
+        "                                        deleteGift: { reference in\n"
+        "                                            AyGrammDecorations.remove(reference: reference)\n"
+        "                                        },\n"
+        "                                        upgradeGift: { _, reference, _ in\n"
+        "                                            return AyGrammDecorations.upgradeSignal(engine: engine, reference: reference)\n"
+        "                                        }\n"
+        "                                    )\n"
+        "                                    self.parentController?.push(controller)\n"
         "                                    return\n"
         "                                }\n")
 # Встроенный плагин «Прочитать вслух» в меню сообщения.
