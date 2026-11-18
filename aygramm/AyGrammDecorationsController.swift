@@ -76,25 +76,25 @@ private enum AyGrammDecorationsEntry: ItemListNodeEntry {
         case .giftsHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ПОДАРКИ-УКРАШЕНИЯ", sectionId: self.section)
         case let .gift(index, title, isUpgraded):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "🎁 " + title, label: isUpgraded ? "улучшен" : "обычный", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: isUpgraded ? ayGrammIcon("sparkles", AyGrammColor.purple) : ayGrammIcon("gift.fill", AyGrammColor.pink), title: title, label: isUpgraded ? "улучшен ✨" : "обычный", sectionId: self.section, style: .blocks, action: {
                 arguments.openItem(Int(index))
             })
         case .add:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить подарок", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("plus", AyGrammColor.green), title: "Добавить подарок", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.add()
             })
         case .giftsFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Украшения видны только на этом телефоне во вкладке «Подарки» вашего профиля. Другие люди их не видят, Telegram о них не знает, продать или передать их нельзя. На каждом украшении стоит лента «украшение». «Улучшить» даёт подарку случайную модель, узор и фон из вариантов Telegram."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Украшения видны только на этом телефоне во вкладке «Подарки» профиля, с лентой «украшение». Продать или передать их нельзя. «Улучшить» даёт подарку случайную модель, узор и фон из вариантов Telegram."), sectionId: self.section)
         case .ratingHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "РЕЙТИНГ-УКРАШЕНИЕ", sectionId: self.section)
         case let .rating(level):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Уровень", label: "⭐ \(level)", sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("star.fill", AyGrammColor.yellow), title: "Уровень", label: "\(level) из 90", sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case .ratingUp:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Повысить на 1", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("arrow.up", AyGrammColor.green), title: "Повысить на 1", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.changeRating(1)
             })
         case .ratingDown:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Понизить на 1", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("arrow.down", AyGrammColor.red), title: "Понизить на 1", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.changeRating(-1)
             })
         case .ratingFooter:
@@ -228,7 +228,7 @@ private enum AyGrammDecorationsCatalogEntry: ItemListNodeEntry {
         case let .status(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .gift(index, title, label):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: label, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("gift.fill", AyGrammColor.pink), title: title, label: label, sectionId: self.section, style: .blocks, action: {
                 add(Int(index))
             })
         }
