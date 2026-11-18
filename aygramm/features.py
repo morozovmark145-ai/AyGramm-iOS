@@ -54,6 +54,7 @@ for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammBuiltinController.swift", ROOT / PEER / "AyGrammBuiltinController.swift")
+shutil.copy(ROOT / "aygramm/AyGrammIcons.swift", ROOT / PEER / "AyGrammIcons.swift")
 shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
 shutil.copy(ROOT / "aygramm/AyGrammKeepAlive.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammKeepAlive.swift")
 
