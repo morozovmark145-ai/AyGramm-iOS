@@ -19,11 +19,17 @@ private final class AyGrammBuiltinArguments {
     let openLog: () -> Void
     let openFonts: () -> Void
     let openVoice: () -> Void
+    let openCrashLog: () -> Void
+    let exportBackup: () -> Void
+    let restoreBackup: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void) {
         self.toggle = toggle
         self.openFonts = openFonts
         self.openVoice = openVoice
+        self.openCrashLog = openCrashLog
+        self.exportBackup = exportBackup
+        self.restoreBackup = restoreBackup
         self.openDecorations = openDecorations
         self.openProfiles = openProfiles
         self.openLog = openLog
@@ -39,6 +45,9 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case voice(String)
     case profiles
     case log(Int)
+    case crashLog(Bool)
+    case backupExport
+    case backupRestore
     case footer
 
     var section: ItemListSectionId {
@@ -61,6 +70,12 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return 510
         case .log:
             return 511
+        case .crashLog:
+            return 512
+        case .backupExport:
+            return 513
+        case .backupRestore:
+            return 514
         case .footer:
             return 599
         }
@@ -99,6 +114,18 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("doc.text.fill", AyGrammColor.gray), title: "Журнал плагинов", label: "\(count)", sectionId: self.section, style: .blocks, action: {
                 arguments.openLog()
             })
+        case let .crashLog(hasCrash):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("exclamationmark.triangle.fill", AyGrammColor.orange), title: "Журнал вылетов", label: hasCrash ? "есть запись" : "пусто", sectionId: self.section, style: .blocks, action: {
+                arguments.openCrashLog()
+            })
+        case .backupExport:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("square.and.arrow.up.fill", AyGrammColor.blue), title: "Скопировать резервную копию", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.exportBackup()
+            })
+        case .backupRestore:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("arrow.counterclockwise", AyGrammColor.green), title: "Восстановить из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.restoreBackup()
+            })
         case .footer:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Встроенные плагины работают внутри AyGramm и ничего не отправляют автору. Новый лимит аккаунтов действует при следующем добавлении аккаунта."), sectionId: self.section)
         }
@@ -118,7 +145,13 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     let logCountPromise = ValuePromise<Int>(AyGrammPluginLog.entries().count, ignoreRepeated: true)
     let fontPromise = ValuePromise<Int>(AyGrammFonts.selectedIndex, ignoreRepeated: true)
     let voicePromise = ValuePromise<Int>(AyGrammVoice.selectedIndex, ignoreRepeated: true)
+    let crashPromise = ValuePromise<Bool>(AyGrammCrashLog.lastReport != nil, ignoreRepeated: true)
     var pushControllerImpl: ((ViewController) -> Void)?
+    var presentControllerImpl: ((ViewController) -> Void)?
+    let showMessage: (String) -> Void = { text in
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        presentControllerImpl?(textAlertController(context: context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+    }
 
     let arguments = AyGrammBuiltinArguments(toggle: { key, value in
         AyGrammSettings.setValue(key, value)
@@ -141,6 +174,36 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         pushControllerImpl?(ayGrammVoiceController(context: context, selected: { index in
             voicePromise.set(index)
         }))
+    }, openCrashLog: {
+        guard let report = AyGrammCrashLog.lastReport else {
+            showMessage("Вылетов не было. Если AyGramm закроется сам, причина появится здесь.")
+            return
+        }
+        presentControllerImpl?(textAlertController(context: context, title: "Последний вылет", text: String(report.prefix(700)), actions: [
+            TextAlertAction(type: .genericAction, title: "Удалить", action: {
+                AyGrammCrashLog.clear()
+                crashPromise.set(false)
+            }),
+            TextAlertAction(type: .defaultAction, title: "Скопировать", action: {
+                UIPasteboard.general.string = report
+            })
+        ]))
+    }, exportBackup: {
+        if let text = AyGrammBackup.export() {
+            UIPasteboard.general.string = text
+            showMessage("Резервная копия скопирована: настройки, плагины и украшения. Вставьте её в «Избранное», чтобы сохранить.")
+        } else {
+            showMessage("Не удалось собрать резервную копию.")
+        }
+    }, restoreBackup: {
+        guard let text = UIPasteboard.general.string, AyGrammBackup.restore(text) else {
+            showMessage("В буфере обмена нет резервной копии AyGramm. Скопируйте её текст из «Избранного».")
+            return
+        }
+        valuesPromise.set(ayGrammBuiltinValues())
+        fontPromise.set(AyGrammFonts.selectedIndex)
+        voicePromise.set(AyGrammVoice.selectedIndex)
+        showMessage("Настройки, плагины и украшения восстановлены.")
     })
 
     let signal = combineLatest(queue: .mainQueue(),
@@ -148,9 +211,10 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         valuesPromise.get(),
         logCountPromise.get(),
         fontPromise.get(),
-        voicePromise.get()
+        voicePromise.get(),
+        crashPromise.get()
     )
-    |> map { presentationData, values, logCount, fontIndex, voiceIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, values, logCount, fontIndex, voiceIndex, hasCrash -> (ItemListControllerState, (ItemListNodeState, Any)) in
         func value(_ key: String) -> Bool {
             return values[key] ?? AyGrammSettings.storedValue(key)
         }
@@ -174,6 +238,9 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.sectionHeader(500, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
+        entries.append(.crashLog(hasCrash))
+        entries.append(.backupExport)
+        entries.append(.backupRestore)
         entries.append(.footer)
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Встроенные плагины"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
@@ -183,6 +250,9 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     let controller = ItemListController(context: context, state: signal)
     pushControllerImpl = { [weak controller] c in
         controller?.push(c)
+    }
+    presentControllerImpl = { [weak controller] c in
+        controller?.present(c, in: .window(.root))
     }
     return controller
 }
