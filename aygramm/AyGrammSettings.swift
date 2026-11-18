@@ -19,9 +19,12 @@ public enum AyGrammSettings {
     public static let decorationsKey = "AyGrammDecorationsEnabled"
     public static let tokensKey = "AyGrammTokens"
     public static let readAloudKey = "AyGrammReadAloud"
+    public static let secondsKey = "AyGrammSeconds"
+    public static let showIdKey = "AyGrammShowId"
+    public static let streamerKey = "AyGrammStreamer"
     static let bannedKey = "AyGrammBanned"
     // Переключатели, которые по умолчанию выключены.
-    static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey]
+    static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey, streamerKey]
 
     // Действующее значение: при бане всегда выключено.
     public static func value(_ key: String) -> Bool {
@@ -102,7 +105,18 @@ public enum AyGrammSettings {
     // MARK: - Профили настроек «Работа» и «Дом»
 
     // Все переключатели AyGramm, которые сохраняет профиль.
-    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey]
+    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey]
+
+    // «14:05» → «14:05:37», «2:05 PM» → «2:05:37 PM». Секунды встают после первого времени в строке.
+    public static func addSeconds(_ text: String, timestamp: Int32) -> String {
+        var moment = time_t(timestamp)
+        var info = tm()
+        localtime_r(&moment, &info)
+        guard let range = text.range(of: "\\d{1,2}:\\d{2}", options: .regularExpression) else {
+            return text
+        }
+        return text.replacingCharacters(in: range, with: String(text[range]) + String(format: ":%02d", Int(info.tm_sec)))
+    }
 
     static func profileStorageKey(_ name: String) -> String {
         return "AyGrammProfile." + name
