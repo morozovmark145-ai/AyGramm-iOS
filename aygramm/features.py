@@ -49,7 +49,7 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift"]:
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift", "AyGrammVoice.swift"]:
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
@@ -353,5 +353,11 @@ replace(PITEMS, "        if let phone = user.phone {\n            let formattedP
         "            let formattedPhone = formatPhoneNumber(context: context, number: phone)\n")
 replace(f"{PEER}/PeerInfoHeaderNode.swift", "                var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? \"\")\n",
         "                var subtitle = AyGrammSettings.value(AyGrammSettings.streamerKey) ? \"Номер скрыт\" : formatPhoneNumber(context: self.context, number: user.phone ?? \"\")\n")
+
+# Встроенный плагин «Изменение голоса»: эффект меняет отсчёты голосового до кодека Opus.
+replace("submodules/TelegramUI/Sources/ManagedAudioRecorder.swift",
+        "                self.processWaveformPreview(samples: currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n",
+        "                AyGrammVoice.process(currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n"
+        "                self.processWaveformPreview(samples: currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n")
 
 print("AyGramm: все правки применены")
