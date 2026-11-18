@@ -168,7 +168,30 @@ public enum AyGrammFonts {
         }
         set {
             UserDefaults.standard.set(newValue, forKey: key)
+            if newValue > 0 {
+                UserDefaults.standard.set(newValue, forKey: lastKey)
+            }
         }
+    }
+
+    // Кнопка в меню «Отправить» (долгое нажатие): включает последний выбранный шрифт или выключает шрифт.
+    static let lastKey = "AyGrammFontLastStyle"
+
+    static var lastIndex: Int {
+        let value = UserDefaults.standard.integer(forKey: lastKey)
+        return value > 0 && value < styles.count ? value : 1
+    }
+
+    public static var quickTitle: String {
+        let current = selectedIndex
+        if current != 0 {
+            return "Выключить шрифт «\(styles[current].name)»"
+        }
+        return "Включить шрифт «\(styles[lastIndex].name)»"
+    }
+
+    public static func toggleQuick() {
+        selectedIndex = selectedIndex != 0 ? 0 : lastIndex
     }
 
     public static var selected: AyGrammFontStyle? {
