@@ -9,7 +9,7 @@ import AccountContext
 import PresentationDataUtils
 
 // Меню «Украшения профиля»: подарки и рейтинг, которые видны только на этом телефоне.
-// Подарки появляются во вкладке «Подарки» своего профиля с лентой «украшение».
+// Подарки появляются во вкладке «Подарки» своего профиля с лентой AyGramm.
 
 private final class AyGrammDecorationsArguments {
     let openItem: (Int) -> Void
@@ -84,7 +84,7 @@ private enum AyGrammDecorationsEntry: ItemListNodeEntry {
                 arguments.add()
             })
         case .giftsFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Украшения видны только на этом телефоне во вкладке «Подарки» профиля, с лентой «украшение». Продать или передать их нельзя. «Улучшить» даёт подарку случайную модель, узор и фон из вариантов Telegram."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Украшения видны только на этом телефоне во вкладке «Подарки» профиля, с лентой AyGramm. Нажмите на подарок в профиле, чтобы скрыть его или улучшить. Продать или передать их нельзя. «Улучшить» даёт подарку случайную модель, узор и фон из вариантов Telegram."), sectionId: self.section)
         case .ratingHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "РЕЙТИНГ-УКРАШЕНИЕ", sectionId: self.section)
         case let .rating(level):
