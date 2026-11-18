@@ -11,6 +11,8 @@ public struct AyGrammFontStyle {
     let base: Int
     let mark: String
     let separator: String
+    var prefix: String = ""
+    var suffix: String = ""
 }
 
 public enum AyGrammFonts {
@@ -66,7 +68,29 @@ public enum AyGrammFonts {
         ("Скрытый (Telegram)", .Spoiler),
     ]
 
-    // Все стили: 0 = «Обычный» (плагин выключен), дальше 6 стилей Telegram и 207 стилей Unicode.
+    // Рамки для ников в стиле стримеров: значки до и после всего сообщения. Работают и с русскими буквами.
+    static let frames: [(String, String, String)] = [
+        ("Мелстрой", "💸👑 ", " 👑💸"),
+        ("Корона", "👑 ", " 👑"),
+        ("Узоры", "꧁༺ ", " ༻꧂"),
+        ("Звёзды", "★彡 ", " 彡★"),
+        ("Мешки денег", "💰 ", " 💰"),
+        ("Молнии", "⚡ ", " ⚡"),
+        ("Огонь", "🔥 ", " 🔥"),
+        ("Бриллианты", "💎 ", " 💎"),
+        ("Скобки 『』", "『", "』"),
+        ("Скобки 【】", "【", "】"),
+        ("Знак 亗", "亗 ", " 亗"),
+        ("Знак 乂", "乂 ", " 乂"),
+        ("Цветы", "✿ ", " ✿"),
+        ("Стрелки", "»» ", " ««"),
+        ("Ромбы", "◆ ", " ◆"),
+        ("Сердечки", "♡ ", " ♡"),
+    ]
+    // Начертания для рамок: обычные буквы, капитель, жирный, жирный готический.
+    static let frameBases: [Int] = [0, 20, 1, 7]
+
+    // Все стили: 0 = «Обычный» (плагин выключен), дальше 6 стилей Telegram, 207 стилей Unicode и 64 рамки для ников.
     public static let styles: [AyGrammFontStyle] = {
         var result: [AyGrammFontStyle] = [AyGrammFontStyle(name: "Обычный", entity: nil, base: 0, mark: "", separator: "")]
         for (name, type) in entityStyles {
@@ -86,6 +110,12 @@ public enum AyGrammFonts {
                     }
                 }
                 result.append(AyGrammFontStyle(name: name, entity: nil, base: base, mark: decoration.1, separator: decoration.2))
+            }
+        }
+        for base in frameBases {
+            for frame in frames {
+                let baseName = base == 0 ? "Ник" : "Ник, " + baseNames[base].lowercased()
+                result.append(AyGrammFontStyle(name: baseName + ", " + frame.0, entity: nil, base: base, mark: "", separator: "", prefix: frame.1, suffix: frame.2))
             }
         }
         return result
@@ -109,6 +139,14 @@ public enum AyGrammFonts {
                 index += 1
             }
             sections.append((base == 0 ? "Обычные буквы" : baseNames[base], items))
+        }
+        for base in frameBases {
+            var items: [(Int, String)] = []
+            for frame in frames {
+                items.append((index, frame.0))
+                index += 1
+            }
+            sections.append((base == 0 ? "Ники: обычные буквы" : "Ники: " + baseNames[base].lowercased(), items))
         }
         return sections
     }()
@@ -185,7 +223,12 @@ public enum AyGrammFonts {
             }
             lines.append(words.joined(separator: " "))
         }
-        return lines.joined(separator: "\n")
+        let body = lines.joined(separator: "\n")
+        // Рамку не ставим на команды ботов и пустой текст, иначе бот не узнает команду.
+        if (style.prefix.isEmpty && style.suffix.isEmpty) || text.hasPrefix("/") || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return body
+        }
+        return style.prefix + body + style.suffix
     }
 
     // Образец для меню выбора.
