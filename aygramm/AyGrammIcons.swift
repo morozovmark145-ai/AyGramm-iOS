@@ -83,6 +83,8 @@ func ayGrammKeyIcon(_ key: String) -> UIImage? {
         return ayGrammIcon("nosign", AyGrammColor.red)
     case AyGrammSettings.exportKey:
         return ayGrammIcon("tray.and.arrow.down.fill", AyGrammColor.teal)
+    case AyGrammSettings.fontButtonKey:
+        return ayGrammIcon("hand.tap.fill", AyGrammColor.indigo)
     default:
         return ayGrammIcon("gearshape", AyGrammColor.gray)
     }
