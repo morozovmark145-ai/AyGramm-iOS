@@ -394,4 +394,22 @@ replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
         "        }\n"
         "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n")
 
+# Кнопка шрифта: долгое нажатие на «Отправить» включает или выключает шрифт сообщений.
+replace("submodules/ChatSendMessageActionUI/Sources/ChatSendMessageContextScreen.swift",
+        "            case let.sendMessage(sendMessage):\n                if !reminders {\n",
+        "            case let.sendMessage(sendMessage):\n"
+        "                if AyGrammSettings.value(AyGrammSettings.fontButtonKey) {\n"
+        "                    items.append(.action(ContextMenuActionItem(\n"
+        "                        id: AnyHashable(\"aygrammFont\"),\n"
+        "                        text: AyGrammFonts.quickTitle,\n"
+        "                        icon: { theme in\n"
+        "                            return generateTintedImage(image: UIImage(systemName: \"textformat\"), color: theme.contextMenu.primaryColor)\n"
+        "                        }, action: { [weak self] _, _ in\n"
+        "                            AyGrammFonts.toggleQuick()\n"
+        "                            self?.environment?.controller()?.dismiss()\n"
+        "                        }\n"
+        "                    )))\n"
+        "                }\n"
+        "                if !reminders {\n")
+
 print("AyGramm: все правки применены")
