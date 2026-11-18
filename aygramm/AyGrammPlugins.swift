@@ -279,7 +279,8 @@ func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] 
     let usePlugins = AyGrammSettings.pluginsEnabled && !AyGrammPlugins.installedIds.isEmpty
     let silent = AyGrammSettings.silentSend
     let useTokens = AyGrammSettings.value(AyGrammSettings.tokensKey)
-    if !usePlugins && !silent && !useTokens {
+    let fontStyle = AyGrammFonts.selected
+    if !usePlugins && !silent && !useTokens && fontStyle == nil {
         return messages
     }
     return messages.map { message -> EnqueueMessage in
@@ -306,10 +307,21 @@ func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] 
                     updatedText = transformed
                 }
             }
+            // Встроенный плагин «Шрифт сообщений».
+            var fontChanged = false
+            if let fontStyle = fontStyle, !updatedText.isEmpty && !hasEntities {
+                if fontStyle.entity != nil {
+                    updatedAttributes = updatedAttributes.filter { !($0 is TextEntitiesMessageAttribute) }
+                    updatedAttributes.append(TextEntitiesMessageAttribute(entities: AyGrammFonts.entities(for: updatedText, style: fontStyle)))
+                    fontChanged = true
+                } else {
+                    updatedText = AyGrammFonts.apply(updatedText, style: fontStyle)
+                }
+            }
             if silent && !hasNotificationInfo {
                 updatedAttributes.append(NotificationInfoMessageAttribute(flags: .muted))
             }
-            if updatedText == text && updatedAttributes.count == attributes.count {
+            if updatedText == text && updatedAttributes.count == attributes.count && !fontChanged {
                 return message
             }
             return .message(text: updatedText, attributes: updatedAttributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: threadId, replyToMessageId: replyToMessageId, replyToStoryId: replyToStoryId, localGroupingKey: localGroupingKey, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets)
