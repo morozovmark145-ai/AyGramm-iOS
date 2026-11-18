@@ -18,10 +18,12 @@ private final class AyGrammBuiltinArguments {
     let openProfiles: () -> Void
     let openLog: () -> Void
     let openFonts: () -> Void
+    let openVoice: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void) {
         self.toggle = toggle
         self.openFonts = openFonts
+        self.openVoice = openVoice
         self.openDecorations = openDecorations
         self.openProfiles = openProfiles
         self.openLog = openLog
@@ -34,6 +36,7 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case toggle(Int32, String, String, String, Bool)
     case decorations
     case font(String)
+    case voice(String)
     case profiles
     case log(Int)
     case footer
@@ -52,6 +55,8 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return 311
         case .font:
             return 411
+        case .voice:
+            return 414
         case .profiles:
             return 510
         case .log:
@@ -82,6 +87,10 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("textformat", AyGrammColor.indigo), title: "Шрифт сообщений", label: name, sectionId: self.section, style: .blocks, action: {
                 arguments.openFonts()
             })
+        case let .voice(name):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("waveform", AyGrammColor.pink), title: "Изменение голоса", label: name, sectionId: self.section, style: .blocks, action: {
+                arguments.openVoice()
+            })
         case .profiles:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("slider.horizontal.3", AyGrammColor.gray), title: "Профили настроек", label: "Работа, Дом", sectionId: self.section, style: .blocks, action: {
                 arguments.openProfiles()
@@ -108,6 +117,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     let valuesPromise = ValuePromise<[String: Bool]>(ayGrammBuiltinValues(), ignoreRepeated: true)
     let logCountPromise = ValuePromise<Int>(AyGrammPluginLog.entries().count, ignoreRepeated: true)
     let fontPromise = ValuePromise<Int>(AyGrammFonts.selectedIndex, ignoreRepeated: true)
+    let voicePromise = ValuePromise<Int>(AyGrammVoice.selectedIndex, ignoreRepeated: true)
     var pushControllerImpl: ((ViewController) -> Void)?
 
     let arguments = AyGrammBuiltinArguments(toggle: { key, value in
@@ -127,15 +137,20 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         pushControllerImpl?(ayGrammFontsController(context: context, selected: { index in
             fontPromise.set(index)
         }))
+    }, openVoice: {
+        pushControllerImpl?(ayGrammVoiceController(context: context, selected: { index in
+            voicePromise.set(index)
+        }))
     })
 
     let signal = combineLatest(queue: .mainQueue(),
         context.sharedContext.presentationData,
         valuesPromise.get(),
         logCountPromise.get(),
-        fontPromise.get()
+        fontPromise.get(),
+        voicePromise.get()
     )
-    |> map { presentationData, values, logCount, fontIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, values, logCount, fontIndex, voiceIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
         func value(_ key: String) -> Bool {
             return values[key] ?? AyGrammSettings.storedValue(key)
         }
@@ -155,6 +170,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.font(AyGrammFonts.styles[fontIndex].name))
         entries.append(.toggle(412, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
         entries.append(.toggle(413, AyGrammSettings.secondsKey, "Секунды во времени", "Время сообщений с секундами: 14:05:37.", value(AyGrammSettings.secondsKey)))
+        entries.append(.voice(AyGrammVoice.effects[voiceIndex].0))
         entries.append(.sectionHeader(500, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
@@ -422,6 +438,73 @@ private func ayGrammFontsController(context: AccountContext, selected: @escaping
             }
         }
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Шрифт сообщений"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, select))
+    }
+
+    return ItemListController(context: context, state: signal)
+}
+
+// MARK: - Изменение голоса
+
+private enum AyGrammVoiceEntry: ItemListNodeEntry {
+    case header
+    case effect(Int32, String, String, Bool)
+    case footer
+
+    var section: ItemListSectionId {
+        return 0
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case .header:
+            return 0
+        case let .effect(index, _, _, _):
+            return 1 + index
+        case .footer:
+            return 100
+        }
+    }
+
+    static func <(lhs: AyGrammVoiceEntry, rhs: AyGrammVoiceEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let select = arguments as! (Int) -> Void
+        switch self {
+        case .header:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЭФФЕКТ", sectionId: self.section)
+        case let .effect(index, title, subtitle, isSelected):
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: title, subtitle: subtitle, style: .right, checked: isSelected, zeroSeparatorInsets: false, sectionId: self.section, action: {
+                select(Int(index))
+            })
+        case .footer:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Голос меняется при записи голосового сообщения. Собеседник слышит уже изменённый голос, прослушивание перед отправкой звучит так же. Видеосообщения в кружках не меняются."), sectionId: self.section)
+        }
+    }
+}
+
+private func ayGrammVoiceController(context: AccountContext, selected: @escaping (Int) -> Void) -> ViewController {
+    let selectedPromise = ValuePromise<Int>(AyGrammVoice.selectedIndex, ignoreRepeated: true)
+    let select: (Int) -> Void = { index in
+        AyGrammVoice.selectedIndex = index
+        selectedPromise.set(index)
+        selected(index)
+    }
+
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        selectedPromise.get()
+    )
+    |> map { presentationData, selectedIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        var entries: [AyGrammVoiceEntry] = [.header]
+        for (index, effect) in AyGrammVoice.effects.enumerated() {
+            entries.append(.effect(Int32(index), effect.0, effect.1, index == selectedIndex))
+        }
+        entries.append(.footer)
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Изменение голоса"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, select))
     }
