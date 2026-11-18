@@ -16,9 +16,11 @@ private final class AyGrammBuiltinArguments {
     let openDecorations: () -> Void
     let openProfiles: () -> Void
     let openLog: () -> Void
+    let openFonts: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void) {
         self.toggle = toggle
+        self.openFonts = openFonts
         self.openDecorations = openDecorations
         self.openProfiles = openProfiles
         self.openLog = openLog
@@ -29,6 +31,7 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case header
     case toggle(Int32, String, String, String, Bool)
     case decorations
+    case font(String)
     case profiles
     case log(Int)
     case footer
@@ -45,6 +48,8 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return id
         case .decorations:
             return 51
+        case .font:
+            return 65
         case .profiles:
             return 90
         case .log:
@@ -71,6 +76,10 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Настроить украшения", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openDecorations()
             })
+        case let .font(name):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Шрифт сообщений", label: name, sectionId: self.section, style: .blocks, action: {
+                arguments.openFonts()
+            })
         case .profiles:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Профили настроек", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openProfiles()
@@ -96,6 +105,7 @@ private func ayGrammBuiltinValues() -> [String: Bool] {
 func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     let valuesPromise = ValuePromise<[String: Bool]>(ayGrammBuiltinValues(), ignoreRepeated: true)
     let logCountPromise = ValuePromise<Int>(AyGrammPluginLog.entries().count, ignoreRepeated: true)
+    let fontPromise = ValuePromise<Int>(AyGrammFonts.selectedIndex, ignoreRepeated: true)
     var pushControllerImpl: ((ViewController) -> Void)?
 
     let arguments = AyGrammBuiltinArguments(toggle: { key, value in
@@ -111,14 +121,19 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         pushControllerImpl?(ayGrammPluginLogController(context: context, cleared: {
             logCountPromise.set(0)
         }))
+    }, openFonts: {
+        pushControllerImpl?(ayGrammFontsController(context: context, selected: { index in
+            fontPromise.set(index)
+        }))
     })
 
     let signal = combineLatest(queue: .mainQueue(),
         context.sharedContext.presentationData,
         valuesPromise.get(),
-        logCountPromise.get()
+        logCountPromise.get(),
+        fontPromise.get()
     )
-    |> map { presentationData, values, logCount -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, values, logCount, fontIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
         func value(_ key: String) -> Bool {
             return values[key] ?? AyGrammSettings.storedValue(key)
         }
@@ -129,6 +144,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.toggle(50, AyGrammSettings.decorationsKey, "Украшения профиля", "Подарки с лентой «украшение» во вкладке «Подарки» своего профиля. Видны только на этом телефоне.", value(AyGrammSettings.decorationsKey)))
         entries.append(.decorations)
         entries.append(.toggle(60, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} в сообщении заменяются на текущие значения при отправке.", value(AyGrammSettings.tokensKey)))
+        entries.append(.font(AyGrammFonts.styles[fontIndex].name))
         entries.append(.toggle(70, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст. Повторное нажатие останавливает чтение.", value(AyGrammSettings.readAloudKey)))
         entries.append(.profiles)
         entries.append(.log(logCount))
@@ -315,6 +331,74 @@ private func ayGrammPluginLogController(context: AccountContext, cleared: @escap
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Журнал плагинов"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, clear))
+    }
+
+    return ItemListController(context: context, state: signal)
+}
+
+// MARK: - Шрифт сообщений
+
+private enum AyGrammFontsEntry: ItemListNodeEntry {
+    case header
+    case style(Int32, String, String, Bool)
+    case footer
+
+    var section: ItemListSectionId {
+        return 0
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case .header:
+            return 0
+        case let .style(index, _, _, _):
+            return 10 + index
+        case .footer:
+            return 100000
+        }
+    }
+
+    static func <(lhs: AyGrammFontsEntry, rhs: AyGrammFontsEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let select = arguments as! (Int) -> Void
+        switch self {
+        case .header:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "\(AyGrammFonts.styles.count - 1) ШРИФТОВ", sectionId: self.section)
+        case let .style(index, sample, name, isSelected):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: (isSelected ? "✓ " : "") + sample, label: index == 0 || sample == name ? "" : name, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {
+                select(Int(index))
+            })
+        case .footer:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Выбранный шрифт применяется к каждому отправленному сообщению. Стили «(Telegram)» работают для русских букв. Остальные меняют латиницу и цифры, а черты, точки и сердечки добавляются и к русским буквам. Ссылки, @имена, #теги и /команды не меняются. Сообщения с вашим форматированием отправляются как есть."), sectionId: self.section)
+        }
+    }
+}
+
+private func ayGrammFontsController(context: AccountContext, selected: @escaping (Int) -> Void) -> ViewController {
+    let selectedPromise = ValuePromise<Int>(AyGrammFonts.selectedIndex, ignoreRepeated: true)
+    let select: (Int) -> Void = { index in
+        AyGrammFonts.selectedIndex = index
+        selectedPromise.set(index)
+        selected(index)
+    }
+    let samples: [String] = (0 ..< AyGrammFonts.styles.count).map { AyGrammFonts.sample($0) }
+
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        selectedPromise.get()
+    )
+    |> map { presentationData, selectedIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        var entries: [AyGrammFontsEntry] = [.header]
+        for (index, style) in AyGrammFonts.styles.enumerated() {
+            entries.append(.style(Int32(index), samples[index], style.name, index == selectedIndex))
+        }
+        entries.append(.footer)
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Шрифт сообщений"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, select))
     }
 
     return ItemListController(context: context, state: signal)
