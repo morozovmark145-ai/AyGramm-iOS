@@ -22,7 +22,9 @@ public struct AyGrammCustomPlugin: Equatable {
 
 public enum AyGrammCustomPluginResult {
     case installed(String)
-    case invalid
+    case invalid(String?)
+    case notJavaScript
+    case tooLarge
     case downloadFailed
 }
 
@@ -118,28 +120,115 @@ public enum AyGrammPlugins {
         return names.keys.sorted().map { AyGrammCustomPlugin(id: $0, name: names[$0] ?? $0) }
     }
 
-    // Код считается плагином, если выполняется без ошибки и объявляет функцию onOutgoingText.
-    static func isValidScript(_ code: String) -> Bool {
-        guard code.contains("onOutgoingText"), let context = JSContext() else {
-            return false
+    // Плагин AyGramm: код на JavaScript с функцией, которая получает текст сообщения и возвращает новый.
+    // Функция может называться onOutgoingText или похоже и объявляться через function, const, let, var,
+    // export или module.exports. console, window, require и import плагин не ломают.
+    static let prelude = "var console = { log: function () {}, info: function () {}, warn: function () {}, error: function () {}, debug: function () {} }; var window = this; var self = this; var module = { exports: {} }; var exports = module.exports; function require() { return {}; }"
+
+    static let resolverScript = """
+    (function () {
+      var names = ["onOutgoingText", "onOutgoingMessage", "onSendMessage", "onSend", "onMessage", "transformText", "transform", "__aygrammDefault"];
+      for (var i = 0; i < names.length; i++) {
+        try { var f = eval(names[i]); if (typeof f === "function") { return f; } } catch (e) {}
+      }
+      var m = module.exports;
+      if (typeof m === "function") { return m; }
+      if (m && typeof m === "object") {
+        for (var j = 0; j < names.length; j++) { if (typeof m[names[j]] === "function") { return m[names[j]]; } }
+        if (typeof m["default"] === "function") { return m["default"]; }
+      }
+      return undefined;
+    })()
+    """
+
+    // Убирает то, что JavaScriptCore не понимает в обычном скрипте: import и export.
+    static func prepareScript(_ code: String) -> String {
+        var script = code.replacingOccurrences(of: "\r\n", with: "\n")
+        if script.hasPrefix("\u{FEFF}") {
+            script.removeFirst()
         }
-        _ = context.evaluateScript(code)
-        if context.exception != nil {
-            return false
+        let replacements: [(String, String)] = [
+            ("(?m)^[ \\t]*import[ \\t][^\\n]*$", ""),
+            ("(?m)^[ \\t]*export[ \\t]*\\{[^}]*\\}[ \\t]*;?", ""),
+            ("export[ \\t]+default[ \\t]+(async[ \\t]+)?function[ \\t]*\\(", "$1function onOutgoingText("),
+            ("export[ \\t]+default[ \\t]+", "var __aygrammDefault = "),
+            ("(?m)^([ \\t]*)export[ \\t]+(?=(async[ \\t]+)?(function|const|let|var|class)\\b)", "$1")
+        ]
+        for (pattern, template) in replacements {
+            script = script.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
         }
-        guard let function = context.objectForKeyedSubscript("onOutgoingText"), !function.isUndefined else {
-            return false
-        }
-        return true
+        return script
     }
 
-    // Название из первой строки-комментария: «// Мой плагин».
+    // Запускает код и находит функцию плагина. onError получает ошибки кода, они не мешают найти функцию.
+    static func loadPlugin(_ code: String, onError: ((String) -> Void)? = nil) -> (context: JSContext, function: JSValue)? {
+        guard let context = JSContext() else {
+            return nil
+        }
+        context.exceptionHandler = { _, exception in
+            onError?(exception?.toString() ?? "неизвестная ошибка")
+        }
+        _ = context.evaluateScript(prelude)
+        _ = context.evaluateScript(prepareScript(code))
+        guard let function = context.evaluateScript(resolverScript), function.isObject else {
+            return nil
+        }
+        return (context, function)
+    }
+
+    // Плагин может вернуть строку или объект с полем text. Пустой ответ не стирает сообщение.
+    static func runPlugin(_ function: JSValue, text: String) -> String? {
+        guard let value = function.call(withArguments: [text]) else {
+            return nil
+        }
+        if value.isString {
+            return value.toString()
+        }
+        if value.isObject, let field = value.objectForKeyedSubscript("text"), field.isString {
+            return field.toString()
+        }
+        return nil
+    }
+
+    static func isValidScript(_ code: String) -> Bool {
+        return loadPlugin(code) != nil
+    }
+
+    // Плагины exteraGram и других Android-клиентов написаны на Python.
+    static func isPythonPlugin(_ code: String) -> Bool {
+        return code.range(of: "(?m)^(from [\\w.]+ import |def \\w+\\(|class \\w+\\(BasePlugin\\))", options: .regularExpression) != nil
+    }
+
+    // Текст файла в частых кодировках: UTF-8, UTF-16, Windows-1251.
+    public static func decodeText(_ data: Data) -> String? {
+        var text: String?
+        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) {
+            text = String(data: data, encoding: .utf16)
+        } else {
+            for encoding in [String.Encoding.utf8, .windowsCP1251, .isoLatin1] {
+                if let value = String(data: data, encoding: encoding) {
+                    text = value
+                    break
+                }
+            }
+        }
+        if let value = text, value.hasPrefix("\u{FEFF}") {
+            return String(value.dropFirst())
+        }
+        return text
+    }
+
+    // Название из первых строк-комментариев: «// Мой плагин» или «// @name Мой плагин».
+    // Строки делятся по любым переводам строки, поэтому файлы из Windows тоже подходят.
     static func scriptName(_ code: String) -> String? {
-        for line in code.split(separator: "\n").prefix(5) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+        for line in code.components(separatedBy: .newlines).prefix(8) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.hasPrefix("//") {
-                let name = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-                if !name.isEmpty {
+                var name = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if name.hasPrefix("@name") {
+                    name = String(name.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                if !name.isEmpty && !name.hasPrefix("@") && !name.hasPrefix("==") {
                     return String(name.prefix(40))
                 }
             }
@@ -153,7 +242,11 @@ public enum AyGrammPlugins {
             Queue.concurrentDefaultQueue().async {
                 var code = clipboard.trimmingCharacters(in: .whitespacesAndNewlines)
                 if code.hasPrefix("https://") || code.hasPrefix("http://") {
-                    if let url = URL(string: code), let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {
+                    var link = code
+                    if link.hasPrefix("https://github.com/") && link.contains("/blob/") {
+                        link = link.replacingOccurrences(of: "https://github.com/", with: "https://raw.githubusercontent.com/").replacingOccurrences(of: "/blob/", with: "/")
+                    }
+                    if let url = URL(string: link), let data = try? Data(contentsOf: url), let text = decodeText(data) {
                         code = text
                     } else {
                         subscriber.putNext(.downloadFailed)
@@ -161,16 +254,28 @@ public enum AyGrammPlugins {
                         return
                     }
                 }
-                if !isValidScript(code) {
-                    subscriber.putNext(.invalid)
+                if code.utf8.count > 1_000_000 {
+                    subscriber.putNext(.tooLarge)
                     subscriber.putCompletion()
                     return
                 }
-                let id = "custom-\(Int(Date().timeIntervalSince1970))"
+                var firstError: String?
+                let loaded = loadPlugin(code, onError: { error in
+                    if firstError == nil {
+                        firstError = error
+                    }
+                })
+                if loaded == nil {
+                    subscriber.putNext(isPythonPlugin(code) ? .notJavaScript : .invalid(firstError))
+                    subscriber.putCompletion()
+                    return
+                }
+                // Секунды и случайное число: два плагина, добавленные за одну секунду, не затирают друг друга.
+                let id = "custom-\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 100 ... 999))"
                 let name = scriptName(code) ?? "Мой плагин"
                 try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
                 guard (try? code.write(to: fileUrl(id: id), atomically: true, encoding: .utf8)) != nil else {
-                    subscriber.putNext(.invalid)
+                    subscriber.putNext(.invalid(nil))
                     subscriber.putCompletion()
                     return
                 }
@@ -207,18 +312,16 @@ public enum AyGrammPlugins {
     public static func transformOutgoingText(_ text: String) -> String {
         var result = text
         for id in installedIds {
-            guard let script = try? String(contentsOf: fileUrl(id: id), encoding: .utf8), let context = JSContext() else {
+            guard let data = try? Data(contentsOf: fileUrl(id: id)), let script = decodeText(data) else {
                 continue
             }
             let name = pluginName(id: id)
-            context.exceptionHandler = { _, exception in
-                AyGrammPluginLog.add("Ошибка в «\(name)»: " + (exception?.toString() ?? "неизвестная ошибка"))
-            }
-            _ = context.evaluateScript(script)
-            guard let function = context.objectForKeyedSubscript("onOutgoingText"), !function.isUndefined else {
+            guard let plugin = loadPlugin(script, onError: { error in
+                AyGrammPluginLog.add("Ошибка в «\(name)»: " + error)
+            }) else {
                 continue
             }
-            if let value = function.call(withArguments: [result]), value.isString, let string = value.toString() {
+            if let string = runPlugin(plugin.function, text: result), !string.isEmpty {
                 if string != result {
                     AyGrammPluginLog.add("«\(name)»: " + result + " → " + string)
                 }
