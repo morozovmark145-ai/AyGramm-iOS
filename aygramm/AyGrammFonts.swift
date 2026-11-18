@@ -91,6 +91,28 @@ public enum AyGrammFonts {
         return result
     }()
 
+    // Разделы меню выбора: «Без шрифта», стили Telegram и по разделу на каждое начертание.
+    // Номера стилей идут в том же порядке, что и в styles.
+    public static let menuSections: [(String, [(Int, String)])] = {
+        var sections: [(String, [(Int, String)])] = []
+        sections.append(("Без шрифта", [(0, "Плагин выключен")]))
+        sections.append(("Форматирование Telegram", (1 ... entityStyles.count).map { ($0, "Работает и для русских букв") }))
+        var index = entityStyles.count + 1
+        for base in 0 ..< baseNames.count {
+            var items: [(Int, String)] = []
+            for (decorationIndex, decoration) in decorations.enumerated() {
+                if base == 0 && decorationIndex == 0 {
+                    continue
+                }
+                let title = decoration.0.isEmpty ? "Без украшений" : String(decoration.0.prefix(1)).uppercased() + String(decoration.0.dropFirst())
+                items.append((index, title))
+                index += 1
+            }
+            sections.append((base == 0 ? "Обычные буквы" : baseNames[base], items))
+        }
+        return sections
+    }()
+
     // Таблицы замены строятся один раз при первом обращении.
     static let tables: [[Character: String]] = baseTables.map { row -> [Character: String] in
         var table: [Character: String] = [:]
@@ -175,7 +197,7 @@ public enum AyGrammFonts {
         if style.entity != nil || index == 0 {
             return style.name
         }
-        return apply("AyGramm 2026", style: style)
+        return apply("AyGramm Привет 2026", style: style)
     }
 
     // Форматирование Telegram на весь текст для стилей 1–6.
