@@ -249,6 +249,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.toggle(415, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
         entries.append(.filters(AyGrammFilters.words.count + AyGrammFilters.authors.count))
         entries.append(.toggle(417, AyGrammSettings.exportKey, "Экспорт чата", "Пункт в меню сообщения: скачанные сообщения чата в файл .txt. Чаты с запретом копирования не экспортируются.", value(AyGrammSettings.exportKey)))
+        entries.append(.toggle(418, AyGrammSettings.fontButtonKey, "Кнопка шрифта", "Долгое нажатие на «Отправить»: включить или выключить шрифт сообщений.", value(AyGrammSettings.fontButtonKey)))
         entries.append(.sectionHeader(500, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
