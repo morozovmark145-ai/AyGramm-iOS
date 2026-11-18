@@ -146,7 +146,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.sectionHeader(200, "АККАУНТЫ"))
         entries.append(.toggle(210, AyGrammSettings.unlimitedAccountsKey, "Аккаунты без лимита", "До 1000 аккаунтов вместо 3. С 15–20 аккаунтами iOS может закрывать приложение.", value(AyGrammSettings.unlimitedAccountsKey)))
         entries.append(.sectionHeader(300, "ПРОФИЛЬ"))
-        entries.append(.toggle(310, AyGrammSettings.decorationsKey, "Украшения профиля", "Подарки с лентой «украшение» в своём профиле. Видны только на этом телефоне.", value(AyGrammSettings.decorationsKey)))
+        entries.append(.toggle(310, AyGrammSettings.decorationsKey, "Украшения профиля", "Подарки и NFT из каталога в своём профиле, с лентой AyGramm. Видны только на этом телефоне.", value(AyGrammSettings.decorationsKey)))
         entries.append(.decorations)
         entries.append(.sectionHeader(400, "СООБЩЕНИЯ"))
         entries.append(.toggle(410, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} заменяются при отправке.", value(AyGrammSettings.tokensKey)))
