@@ -82,15 +82,16 @@ public enum AyGrammCommunity {
     }
 
     // Подписчики (до 200 последних) или забаненные. Telegram отдаёт этот список только админам канала.
-    public static func members(engine: TelegramEngine, channelId: EnginePeer.Id, banned: Bool) -> Signal<[RenderedChannelParticipant], NoError> {
-        return engine.peers.channelMembers(peerId: channelId, category: banned ? .banned(.all) : .recent(.all), offset: 0, limit: 200)
+    public static func members(engine: TelegramEngine, channelId: EnginePeer.Id, banned: Bool, offset: Int32 = 0) -> Signal<[RenderedChannelParticipant], NoError> {
+        return engine.peers.channelMembers(peerId: channelId, category: banned ? .banned(.all) : .recent(.all), offset: offset, limit: 200)
         |> map { members -> [RenderedChannelParticipant] in
             return members ?? []
         }
     }
 
-    public static func setBanned(engine: TelegramEngine, channelId: EnginePeer.Id, memberId: EnginePeer.Id, banned: Bool) -> Signal<Void, NoError> {
-        let rights: TelegramChatBannedRights? = banned ? TelegramChatBannedRights(flags: [.banReadMessages], untilDate: Int32.max) : nil
+    // until: дата окончания бана. Int32.max = навсегда, после даты Telegram снимает бан сам.
+    public static func setBanned(engine: TelegramEngine, channelId: EnginePeer.Id, memberId: EnginePeer.Id, banned: Bool, until: Int32 = Int32.max) -> Signal<Void, NoError> {
+        let rights: TelegramChatBannedRights? = banned ? TelegramChatBannedRights(flags: [.banReadMessages], untilDate: until) : nil
         return engine.peers.updateChannelMemberBannedRights(peerId: channelId, memberId: memberId, rights: rights)
         |> map { _ -> Void in
             return Void()
@@ -144,5 +145,88 @@ public enum AyGrammCommunity {
             }
             return EmptyDisposable
         }
+    }
+
+    // Дата подписки и дата окончания бана из записи участника канала.
+    public static func joinDate(_ participant: ChannelParticipant) -> Int32? {
+        if case let .member(_, invitedAt, _, _, _, _) = participant {
+            return invitedAt
+        }
+        return nil
+    }
+
+    public static func banUntil(_ participant: ChannelParticipant) -> Int32? {
+        if case let .member(_, _, _, banInfo, _, _) = participant, let banInfo = banInfo {
+            return banInfo.rights.untilDate
+        }
+        return nil
+    }
+
+    // Пользователь по @username или ссылке t.me.
+    public static func resolveUser(engine: TelegramEngine, username: String) -> Signal<EnginePeer?, NoError> {
+        var name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["https://t.me/", "http://t.me/", "t.me/", "@"] {
+            if name.hasPrefix(prefix) {
+                name = String(name.dropFirst(prefix.count))
+            }
+        }
+        if name.isEmpty {
+            return .single(nil)
+        }
+        return engine.peers.resolvePeerByName(name: name, referrer: nil)
+        |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
+            switch result {
+            case .progress:
+                return .complete()
+            case let .result(peer):
+                return .single(peer)
+            }
+        }
+        |> take(1)
+    }
+
+    // Скачивания по релизам GitHub: тег и сумма скачиваний его файлов, новые релизы первыми.
+    public static func releaseDownloads() -> Signal<[(String, Int)]?, NoError> {
+        return Signal { subscriber in
+            Queue.concurrentDefaultQueue().async {
+                var result: [(String, Int)]?
+                if let url = URL(string: releasesUrl), let data = try? Data(contentsOf: url), let releases = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]] {
+                    var list: [(String, Int)] = []
+                    for release in releases {
+                        let tag = release["tag_name"] as? String ?? "?"
+                        var sum = 0
+                        for asset in release["assets"] as? [[String: Any]] ?? [] {
+                            sum += asset["download_count"] as? Int ?? 0
+                        }
+                        list.append((tag, sum))
+                    }
+                    result = list
+                }
+                subscriber.putNext(result)
+                subscriber.putCompletion()
+            }
+            return EmptyDisposable
+        }
+    }
+}
+
+// Журнал действий админа на этом телефоне: последние 50 банов и разбанов.
+public enum AyGrammAdminLog {
+    static let key = "AyGrammAdminLog"
+
+    public static func add(_ text: String) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd.MM HH:mm"
+        var list = entries()
+        list.insert(formatter.string(from: Date()) + "  " + text, at: 0)
+        UserDefaults.standard.set(Array(list.prefix(50)), forKey: key)
+    }
+
+    public static func entries() -> [String] {
+        return UserDefaults.standard.stringArray(forKey: key) ?? []
+    }
+
+    public static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
     }
 }
