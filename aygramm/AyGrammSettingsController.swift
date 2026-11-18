@@ -606,8 +606,16 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
             switch result {
             case let .installed(name):
                 showMessage("Плагин «\(name)» добавлен и включён.")
-            case .invalid:
-                showMessage("Это не плагин AyGramm: в коде нет функции onOutgoingText или он выполняется с ошибкой.")
+            case let .invalid(error):
+                var text = "В коде нет функции, которая меняет текст. Нужна функция onOutgoingText(text): она получает текст сообщения и возвращает новый."
+                if let error = error {
+                    text += "\n\nОшибка в коде: " + error
+                }
+                showMessage(text)
+            case .notJavaScript:
+                showMessage("Это плагин на Python для Android (exteraGram и похожие клиенты). iPhone не запускает Python, поэтому AyGramm принимает плагины на JavaScript.")
+            case .tooLarge:
+                showMessage("Файл больше 1 МБ. Плагин AyGramm занимает несколько килобайт текста.")
             case .downloadFailed:
                 showMessage("Не удалось скачать файл по ссылке.")
             }
@@ -637,14 +645,19 @@ private func ayGrammPluginsController(context: AccountContext) -> ViewController
         addCode(clipboard)
     }, addFile: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        presentControllerImpl?(legacyICloudFilePicker(theme: presentationData.theme, mode: .import, documentTypes: ["public.item"], completion: { urls in
+        presentControllerImpl?(legacyICloudFilePicker(theme: presentationData.theme, mode: .import, documentTypes: ["public.item", "public.data", "public.content", "public.text"], completion: { urls in
             guard let url = urls.first else {
                 return
             }
-            if let code = try? String(contentsOf: url, encoding: .utf8) {
+            let accessing = url.startAccessingSecurityScopedResource()
+            let data = try? Data(contentsOf: url)
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+            if let data = data, let code = AyGrammPlugins.decodeText(data) {
                 addCode(code)
             } else {
-                showMessage("Не удалось прочитать файл. Нужен текстовый файл .js.")
+                showMessage("Не удалось прочитать файл. Подойдёт любой текстовый файл с кодом плагина: .js, .txt, .plugin и другие.")
             }
         }))
     }, removeDisabledCustom: {
