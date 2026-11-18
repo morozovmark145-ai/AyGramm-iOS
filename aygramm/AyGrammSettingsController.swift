@@ -164,45 +164,45 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
         case .ghostHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "РЕЖИМ ПРИЗРАКА", sectionId: self.section)
         case let .toggle(_, _, key, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammKeyIcon(key), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(key, value)
             })
         case .ghostFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Включённые пункты не отправляются на сервер Telegram, поэтому собеседники их не видят. После отправки сообщения AyGramm сразу возвращает статус «не в сети». Чтобы отметить чат прочитанным, зажмите сообщение → «Отправить прочтение». Если ответить в чате, Telegram сам отметит его прочитанным."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Собеседники не видят включённые пункты. Отметить чат прочитанным: зажмите сообщение → «Отправить прочтение». Ответ в чате Telegram сам отмечает прочитанным."), sectionId: self.section)
         case .messagesHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "СООБЩЕНИЯ", sectionId: self.section)
         case let .deleted(count):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Удалённые сообщения", label: count, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("tray.full.fill", AyGrammColor.gray), title: "Удалённые сообщения", label: count, sectionId: self.section, style: .blocks, action: {
                 arguments.openDeleted()
             })
         case .messagesFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Удалённое собеседником сообщение остаётся полупрозрачным, рядом со временем появляется 🗑. Прежние версии изменённого сообщения открываются долгим нажатием → «История изменений». «Тихая отправка» отправляет ваши сообщения без звука у получателя."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Удалённое сообщение остаётся полупрозрачным и получает 🗑. Прежние версии: зажмите сообщение → «История изменений». «Тихая отправка» приходит получателю без звука."), sectionId: self.section)
         case .pluginsHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ПЛАГИНЫ", sectionId: self.section)
         case .plugins:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Плагины", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("puzzlepiece.fill", AyGrammColor.green), title: "Плагины", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openPlugins()
             })
         case .decorations:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Встроенные плагины", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("square.grid.2x2.fill", AyGrammColor.indigo), title: "Встроенные плагины", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openDecorations()
             })
         case .pluginsFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины из открытого каталога на GitHub и свои: из буфера обмена или из файла .js. Плагин получает только текст вашего исходящего сообщения и не видит переписки."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины меняют только текст ваших исходящих сообщений и не видят переписку. Встроенные: звонки в фоне, 213 шрифтов, украшения, аккаунты без лимита."), sectionId: self.section)
         case .communityHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "СООБЩЕСТВО", sectionId: self.section)
         case .channel:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Канал AyGramm", label: "@" + AyGrammCommunity.channelUsername, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("paperplane.fill", AyGrammColor.blue), title: "Канал AyGramm", label: "@" + AyGrammCommunity.channelUsername, sectionId: self.section, style: .blocks, action: {
                 arguments.openChannel()
             })
         case .join:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Подписаться на канал", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("person.badge.plus", AyGrammColor.green), title: "Подписаться на канал", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.joinChannel()
             })
         case let .downloads(value):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Скачиваний AyGramm", label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("arrow.down.circle.fill", AyGrammColor.teal), title: "Скачиваний AyGramm", label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .version(value):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Версия", label: value, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("info.circle.fill", AyGrammColor.gray), title: "Версия", label: value, sectionId: self.section, style: .blocks, action: {
                 arguments.openUpdate()
             })
         case .communityFooter:
@@ -214,7 +214,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
         case .backgroundFooter:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Push-уведомления Telegram не доходят до переподписанного AyGramm, поэтому свёрнутый AyGramm засыпает. С этим режимом он держит связь с Telegram в фоне: звонки приходят на экран вызова iOS, о сообщениях приходит уведомление. Батарея садится быстрее. Если смахнуть AyGramm из списка приложений, режим выключится до следующего запуска."), sectionId: self.section)
         case .admin:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Админ-панель", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("lock.shield.fill", AyGrammColor.red), title: "Админ-панель", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openAdmin()
             })
         }
@@ -417,11 +417,11 @@ private enum AyGrammDeletedEntry: ItemListNodeEntry {
         case let .actionsHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case .copyAll:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Скопировать всё", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("doc.on.doc.fill", AyGrammColor.blue), title: "Скопировать всё", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.copyAll()
             })
         case .clear:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Очистить список", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("trash.fill", AyGrammColor.red), title: "Очистить список", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.clear()
             })
         case .listHeader:
@@ -558,7 +558,7 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
         case let .status(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .plugin(_, plugin, installed):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: plugin.name, text: plugin.description, value: installed, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("puzzlepiece.fill", AyGrammColor.green), title: plugin.name, text: plugin.description, value: installed, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(plugin, value)
             })
         case .footer:
@@ -566,19 +566,19 @@ private enum AyGrammPluginsEntry: ItemListNodeEntry {
         case .customHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "МОИ ПЛАГИНЫ", sectionId: self.section)
         case let .custom(_, plugin, enabled):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: plugin.name, value: enabled, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("chevron.left.forwardslash.chevron.right", AyGrammColor.orange), title: plugin.name, value: enabled, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleCustom(plugin, value)
             })
         case .addCustom:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("doc.on.clipboard.fill", AyGrammColor.blue), title: "Добавить из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.addCustom()
             })
         case .addFile:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить из файла", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("folder.fill", AyGrammColor.orange), title: "Добавить из файла", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.addFile()
             })
         case .removeDisabled:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Удалить выключенные", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("trash.fill", AyGrammColor.red), title: "Удалить выключенные", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.removeDisabledCustom()
             })
         case .customFooter:
