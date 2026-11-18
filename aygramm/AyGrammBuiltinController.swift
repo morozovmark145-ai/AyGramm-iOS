@@ -68,21 +68,21 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
         case .font:
             return 411
         case .voice:
-            return 414
+            return 610
         case .filters:
-            return 416
-        case .profiles:
-            return 510
-        case .log:
             return 511
+        case .profiles:
+            return 710
+        case .log:
+            return 711
         case .crashLog:
-            return 512
+            return 712
         case .backupExport:
-            return 513
+            return 713
         case .backupRestore:
-            return 514
+            return 714
         case .footer:
-            return 599
+            return 999
         }
     }
 
@@ -243,14 +243,16 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.sectionHeader(400, "СООБЩЕНИЯ"))
         entries.append(.toggle(410, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} заменяются при отправке.", value(AyGrammSettings.tokensKey)))
         entries.append(.font(AyGrammFonts.styles[fontIndex].name))
-        entries.append(.toggle(412, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
+        entries.append(.toggle(412, AyGrammSettings.fontButtonKey, "Кнопка шрифта", "Долгое нажатие на «Отправить»: включить или выключить шрифт сообщений.", value(AyGrammSettings.fontButtonKey)))
         entries.append(.toggle(413, AyGrammSettings.secondsKey, "Секунды во времени", "Время сообщений с секундами: 14:05:37.", value(AyGrammSettings.secondsKey)))
-        entries.append(.voice(AyGrammVoice.effects[voiceIndex].0))
-        entries.append(.toggle(415, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
+        entries.append(.toggle(414, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
+        entries.append(.sectionHeader(500, "ЧАТЫ"))
+        entries.append(.toggle(510, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
         entries.append(.filters(AyGrammFilters.words.count + AyGrammFilters.authors.count))
-        entries.append(.toggle(417, AyGrammSettings.exportKey, "Экспорт чата", "Пункт в меню сообщения: скачанные сообщения чата в файл .txt. Чаты с запретом копирования не экспортируются.", value(AyGrammSettings.exportKey)))
-        entries.append(.toggle(418, AyGrammSettings.fontButtonKey, "Кнопка шрифта", "Долгое нажатие на «Отправить»: включить или выключить шрифт сообщений.", value(AyGrammSettings.fontButtonKey)))
-        entries.append(.sectionHeader(500, "ИНСТРУМЕНТЫ"))
+        entries.append(.toggle(512, AyGrammSettings.exportKey, "Экспорт чата", "Пункт в меню сообщения: скачанные сообщения чата в файл .txt. Чаты с запретом копирования не экспортируются.", value(AyGrammSettings.exportKey)))
+        entries.append(.sectionHeader(600, "ГОЛОС"))
+        entries.append(.voice(AyGrammVoice.effects[voiceIndex].0))
+        entries.append(.sectionHeader(700, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
         entries.append(.crashLog(hasCrash))
