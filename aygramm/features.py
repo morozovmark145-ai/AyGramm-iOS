@@ -49,7 +49,7 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift", "AyGrammVoice.swift", "AyGrammTools.swift"]:
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift", "AyGrammVoice.swift", "AyGrammTools.swift", "AyGrammFilters.swift"]:
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
@@ -359,5 +359,39 @@ replace("submodules/TelegramUI/Sources/ManagedAudioRecorder.swift",
         "                self.processWaveformPreview(samples: currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n",
         "                AyGrammVoice.process(currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n"
         "                self.processWaveformPreview(samples: currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n")
+
+# Фильтры в группах: сообщения со словами из списка и сообщения скрытых людей не попадают в ленту.
+replace("submodules/TelegramUI/Sources/ChatHistoryEntriesForView.swift",
+        "        if pendingRemovedMessages.contains(message.id) {\n            continue\n        }\n",
+        "        if pendingRemovedMessages.contains(message.id) {\n            continue\n        }\n"
+        "        if AyGrammFilters.shouldHide(message) {\n            continue\n        }\n")
+# Меню сообщения: «Скрывать сообщения автора» в группах и «Экспорт чата в файл» без запрета копирования.
+replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n",
+        "        if AyGrammSettings.value(AyGrammSettings.filtersKey), message.id.peerId.namespace != Namespaces.Peer.CloudUser, let author = message.author, author.id != context.account.peerId {\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"Скрывать сообщения автора\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Restrict\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { c, _ in\n"
+        "                c?.dismiss(completion: {\n"
+        "                    AyGrammFilters.hideAuthor(id: author.id.id._internalGetInt64Value(), name: EnginePeer(author).compactDisplayTitle)\n"
+        "                })\n"
+        "            })))\n"
+        "        }\n"
+        "        if AyGrammSettings.value(AyGrammSettings.exportKey) && !(chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) {\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"Экспорт чата в файл\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Forward\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { c, _ in\n"
+        "                c?.dismiss(completion: {\n"
+        "                    let _ = (AyGrammExport.chatFile(account: context.account, peerId: message.id.peerId)\n"
+        "                    |> deliverOnMainQueue).start(next: { url in\n"
+        "                        guard let url = url else {\n"
+        "                            return\n"
+        "                        }\n"
+        "                        context.sharedContext.mainWindow?.presentNative(UIActivityViewController(activityItems: [url], applicationActivities: nil))\n"
+        "                    })\n"
+        "                })\n"
+        "            })))\n"
+        "        }\n"
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n")
 
 print("AyGramm: все правки применены")
