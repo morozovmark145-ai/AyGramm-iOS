@@ -10,6 +10,7 @@ import PresentationDataUtils
 
 // Встроенные плагины AyGramm: функции, которые работают внутри приложения и включаются переключателем.
 // Плагины из каталога и свои плагины меняют только текст исходящих сообщений, а встроенные могут больше.
+// Экран разбит на 5 разделов: связь, аккаунты, профиль, сообщения, инструменты.
 
 private final class AyGrammBuiltinArguments {
     let toggle: (String, Bool) -> Void
@@ -27,8 +28,9 @@ private final class AyGrammBuiltinArguments {
     }
 }
 
+// stableId / 100 = номер раздела, поэтому строки сами попадают в свой раздел.
 private enum AyGrammBuiltinEntry: ItemListNodeEntry {
-    case header
+    case sectionHeader(Int32, String)
     case toggle(Int32, String, String, String, Bool)
     case decorations
     case font(String)
@@ -37,25 +39,25 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case footer
 
     var section: ItemListSectionId {
-        return 0
+        return self.stableId / 100
     }
 
     var stableId: Int32 {
         switch self {
-        case .header:
-            return 0
+        case let .sectionHeader(id, _):
+            return id
         case let .toggle(id, _, _, _, _):
             return id
         case .decorations:
-            return 51
+            return 311
         case .font:
-            return 65
+            return 411
         case .profiles:
-            return 90
+            return 510
         case .log:
-            return 91
+            return 511
         case .footer:
-            return 99
+            return 599
         }
     }
 
@@ -66,30 +68,30 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! AyGrammBuiltinArguments
         switch self {
-        case .header:
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ВСТРОЕННЫЕ ПЛАГИНЫ", sectionId: self.section)
+        case let .sectionHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .toggle(_, key, title, text, value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, text: text, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammKeyIcon(key), title: title, text: text, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(key, value)
             })
         case .decorations:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Настроить украшения", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("paintbrush.fill", AyGrammColor.purple), title: "Настроить украшения", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openDecorations()
             })
         case let .font(name):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Шрифт сообщений", label: name, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("textformat", AyGrammColor.indigo), title: "Шрифт сообщений", label: name, sectionId: self.section, style: .blocks, action: {
                 arguments.openFonts()
             })
         case .profiles:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Профили настроек", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("slider.horizontal.3", AyGrammColor.gray), title: "Профили настроек", label: "Работа, Дом", sectionId: self.section, style: .blocks, action: {
                 arguments.openProfiles()
             })
         case let .log(count):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Журнал плагинов", label: "\(count)", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("doc.text.fill", AyGrammColor.gray), title: "Журнал плагинов", label: "\(count)", sectionId: self.section, style: .blocks, action: {
                 arguments.openLog()
             })
         case .footer:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Встроенные плагины работают внутри AyGramm и ничего не отправляют автору. Каждый выключается переключателем. Изменение лимита аккаунтов действует при следующем добавлении аккаунта."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Встроенные плагины работают внутри AyGramm и ничего не отправляют автору. Новый лимит аккаунтов действует при следующем добавлении аккаунта."), sectionId: self.section)
         }
     }
 }
@@ -137,15 +139,20 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         func value(_ key: String) -> Bool {
             return values[key] ?? AyGrammSettings.storedValue(key)
         }
-        var entries: [AyGrammBuiltinEntry] = [.header]
-        entries.append(.toggle(10, AyGrammSettings.keepAliveKey, "Звонки в фоне", "Свёрнутый AyGramm держит связь с Telegram: приходят звонки и уведомления о сообщениях. Батарея садится быстрее.", value(AyGrammSettings.keepAliveKey)))
-        entries.append(.toggle(11, AyGrammSettings.keepAliveBatteryKey, "Беречь заряд", "При заряде ниже 20% без зарядки «Звонки в фоне» не включаются.", value(AyGrammSettings.keepAliveBatteryKey)))
-        entries.append(.toggle(20, AyGrammSettings.unlimitedAccountsKey, "Аккаунты без лимита", "До 1000 аккаунтов вместо 3. Каждый аккаунт занимает память, при 15–20 аккаунтах iOS может закрывать приложение.", value(AyGrammSettings.unlimitedAccountsKey)))
-        entries.append(.toggle(50, AyGrammSettings.decorationsKey, "Украшения профиля", "Подарки с лентой «украшение» во вкладке «Подарки» своего профиля. Видны только на этом телефоне.", value(AyGrammSettings.decorationsKey)))
+        var entries: [AyGrammBuiltinEntry] = []
+        entries.append(.sectionHeader(100, "СВЯЗЬ"))
+        entries.append(.toggle(110, AyGrammSettings.keepAliveKey, "Звонки в фоне", "Свёрнутый AyGramm принимает звонки и сообщения. Батарея садится быстрее.", value(AyGrammSettings.keepAliveKey)))
+        entries.append(.toggle(111, AyGrammSettings.keepAliveBatteryKey, "Беречь заряд", "Ниже 20% без зарядки «Звонки в фоне» выключаются.", value(AyGrammSettings.keepAliveBatteryKey)))
+        entries.append(.sectionHeader(200, "АККАУНТЫ"))
+        entries.append(.toggle(210, AyGrammSettings.unlimitedAccountsKey, "Аккаунты без лимита", "До 1000 аккаунтов вместо 3. С 15–20 аккаунтами iOS может закрывать приложение.", value(AyGrammSettings.unlimitedAccountsKey)))
+        entries.append(.sectionHeader(300, "ПРОФИЛЬ"))
+        entries.append(.toggle(310, AyGrammSettings.decorationsKey, "Украшения профиля", "Подарки с лентой «украшение» в своём профиле. Видны только на этом телефоне.", value(AyGrammSettings.decorationsKey)))
         entries.append(.decorations)
-        entries.append(.toggle(60, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} в сообщении заменяются на текущие значения при отправке.", value(AyGrammSettings.tokensKey)))
+        entries.append(.sectionHeader(400, "СООБЩЕНИЯ"))
+        entries.append(.toggle(410, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} заменяются при отправке.", value(AyGrammSettings.tokensKey)))
         entries.append(.font(AyGrammFonts.styles[fontIndex].name))
-        entries.append(.toggle(70, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст. Повторное нажатие останавливает чтение.", value(AyGrammSettings.readAloudKey)))
+        entries.append(.toggle(412, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
+        entries.append(.sectionHeader(500, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
         entries.append(.footer)
@@ -196,11 +203,11 @@ private enum AyGrammProfilesEntry: ItemListNodeEntry {
         case .header:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ПРОФИЛИ", sectionId: self.section)
         case let .apply(_, name, saved):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Включить «\(name)»", label: saved ? "" : "не сохранён", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("checkmark.circle.fill", AyGrammColor.green), title: "Включить «\(name)»", label: saved ? "" : "не сохранён", sectionId: self.section, style: .blocks, action: {
                 action(name, true)
             })
         case let .save(_, name):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Сохранить текущие как «\(name)»", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("square.and.arrow.down.fill", AyGrammColor.blue), title: "Сохранить текущие как «\(name)»", label: "", sectionId: self.section, style: .blocks, action: {
                 action(name, false)
             })
         case .footer:
@@ -298,7 +305,7 @@ private enum AyGrammPluginLogEntry: ItemListNodeEntry {
         case .empty:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Записей нет. Здесь появится, что плагин изменил в сообщении, и ошибки в коде плагинов."), sectionId: self.section)
         case .clear:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: "Очистить журнал", label: "", sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("trash.fill", AyGrammColor.red), title: "Очистить журнал", label: "", sectionId: self.section, style: .blocks, action: {
                 clear()
             })
         }
@@ -338,23 +345,25 @@ private func ayGrammPluginLogController(context: AccountContext, cleared: @escap
 
 // MARK: - Шрифт сообщений
 
+// Раздел 0: «Без шрифта», раздел 1: форматирование Telegram, дальше по разделу на каждое начертание.
+// stableId = раздел × 100 + номер строки, поэтому порядок строк совпадает с порядком разделов.
 private enum AyGrammFontsEntry: ItemListNodeEntry {
-    case header
-    case style(Int32, String, String, Bool)
-    case footer
+    case sectionHeader(Int32, String)
+    case style(Int32, Int32, String, String, Bool)
+    case footer(Int32)
 
     var section: ItemListSectionId {
-        return 0
+        return self.stableId / 100
     }
 
     var stableId: Int32 {
         switch self {
-        case .header:
-            return 0
-        case let .style(index, _, _, _):
-            return 10 + index
-        case .footer:
-            return 100000
+        case let .sectionHeader(id, _):
+            return id
+        case let .style(id, _, _, _, _):
+            return id
+        case let .footer(id):
+            return id
         }
     }
 
@@ -365,14 +374,14 @@ private enum AyGrammFontsEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let select = arguments as! (Int) -> Void
         switch self {
-        case .header:
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: "\(AyGrammFonts.styles.count - 1) ШРИФТОВ", sectionId: self.section)
-        case let .style(index, sample, name, isSelected):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: (isSelected ? "✓ " : "") + sample, label: index == 0 || sample == name ? "" : name, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {
+        case let .sectionHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .style(_, index, title, subtitle, isSelected):
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: title, subtitle: subtitle, style: .right, checked: isSelected, zeroSeparatorInsets: false, sectionId: self.section, action: {
                 select(Int(index))
             })
         case .footer:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Выбранный шрифт применяется к каждому отправленному сообщению. Стили «(Telegram)» работают для русских букв. Остальные меняют латиницу и цифры, а черты, точки и сердечки добавляются и к русским буквам. Ссылки, @имена, #теги и /команды не меняются. Сообщения с вашим форматированием отправляются как есть."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Шрифт применяется к каждому отправленному сообщению. Начертания Unicode меняют латиницу и цифры, черты, точки и сердечки добавляются и к русским буквам. Ссылки, @имена, #теги и /команды не меняются. Сообщения с вашим форматированием уходят как есть."), sectionId: self.section)
         }
     }
 }
@@ -391,11 +400,24 @@ private func ayGrammFontsController(context: AccountContext, selected: @escaping
         selectedPromise.get()
     )
     |> map { presentationData, selectedIndex -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        var entries: [AyGrammFontsEntry] = [.header]
-        for (index, style) in AyGrammFonts.styles.enumerated() {
-            entries.append(.style(Int32(index), samples[index], style.name, index == selectedIndex))
+        var entries: [AyGrammFontsEntry] = []
+        let sections = AyGrammFonts.menuSections
+        for (sectionIndex, section) in sections.enumerated() {
+            let base = Int32(sectionIndex) * 100
+            entries.append(.sectionHeader(base, section.0.uppercased()))
+            for (row, item) in section.1.enumerated() {
+                let title: String
+                if sectionIndex <= 1 {
+                    title = AyGrammFonts.styles[item.0].name.replacingOccurrences(of: " (Telegram)", with: "")
+                } else {
+                    title = samples[item.0]
+                }
+                entries.append(.style(base + 1 + Int32(row), Int32(item.0), title, item.1, item.0 == selectedIndex))
+            }
+            if sectionIndex == sections.count - 1 {
+                entries.append(.footer(base + 99))
+            }
         }
-        entries.append(.footer)
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Шрифт сообщений"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, select))
