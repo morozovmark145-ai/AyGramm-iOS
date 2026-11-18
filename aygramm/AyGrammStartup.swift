@@ -9,6 +9,7 @@ import AccountContext
 // 2. один раз — согласие на подписку с описанием, что увидит автор;
 // 3. подсказка о новом плагине из каталога.
 func ayGrammAccountReady(context: AccountContext, presentAlert: @escaping (UIAlertController) -> Void) {
+    AyGrammCrashLog.install()
     let engine = context.engine
     let _ = (AyGrammCommunity.refreshBanState(engine: engine, accountPeerId: context.account.peerId)
     |> deliverOnMainQueue).start(next: { banned in
