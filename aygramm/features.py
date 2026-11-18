@@ -329,4 +329,29 @@ replace(GLIST, "(self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }
 replace(GLIST, "let index = self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0",
         "let index = self.starsProducts?.filter({ !AyGrammDecorations.isDecoration($0) }).firstIndex(where: { $0 == product }) ?? 0")
 
+# Секунды во времени сообщений: «14:05» → «14:05:37».
+STATUS = "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/StringForMessageTimestampStatus.swift"
+replace(STATUS, "    var dateText = stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)\n",
+        "    var dateText = stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)\n"
+        "    if AyGrammSettings.value(AyGrammSettings.secondsKey) {\n"
+        "        dateText = AyGrammSettings.addSeconds(dateText, timestamp: timestamp)\n"
+        "    }\n")
+
+# ID в профиле пользователя (нажатие копирует) и режим стримера (номер телефона скрыт).
+PITEMS = f"{PEER}/PeerInfoProfileItems.swift"
+replace(PITEMS, "        if let phone = user.phone {\n            let formattedPhone = formatPhoneNumber(context: context, number: phone)\n",
+        "        if AyGrammSettings.value(AyGrammSettings.showIdKey) {\n"
+        "            let ayGrammId = \"\\(user.id.id._internalGetInt64Value())\"\n"
+        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 3100, label: \"ID · нажмите, чтобы скопировать\", text: ayGrammId, textColor: .primary, action: { _, _ in\n"
+        "                UIPasteboard.general.string = ayGrammId\n"
+        "                UINotificationFeedbackGenerator().notificationOccurred(.success)\n"
+        "            }, requestLayout: { animated in\n"
+        "                interaction.requestLayout(animated)\n"
+        "            }))\n"
+        "        }\n"
+        "        if let phone = user.phone, !AyGrammSettings.value(AyGrammSettings.streamerKey) {\n"
+        "            let formattedPhone = formatPhoneNumber(context: context, number: phone)\n")
+replace(f"{PEER}/PeerInfoHeaderNode.swift", "                var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? \"\")\n",
+        "                var subtitle = AyGrammSettings.value(AyGrammSettings.streamerKey) ? \"Номер скрыт\" : formatPhoneNumber(context: self.context, number: user.phone ?? \"\")\n")
+
 print("AyGramm: все правки применены")
