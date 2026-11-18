@@ -22,6 +22,8 @@ public enum AyGrammSettings {
     public static let secondsKey = "AyGrammSeconds"
     public static let showIdKey = "AyGrammShowId"
     public static let streamerKey = "AyGrammStreamer"
+    public static let filtersKey = "AyGrammFiltersEnabled"
+    public static let exportKey = "AyGrammExportEnabled"
     static let bannedKey = "AyGrammBanned"
     // Переключатели, которые по умолчанию выключены.
     static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey, streamerKey]
@@ -105,7 +107,7 @@ public enum AyGrammSettings {
     // MARK: - Профили настроек «Работа» и «Дом»
 
     // Все переключатели AyGramm, которые сохраняет профиль.
-    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey]
+    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey, filtersKey, exportKey]
 
     // «14:05» → «14:05:37», «2:05 PM» → «2:05:37 PM». Секунды встают после первого времени в строке.
     public static func addSeconds(_ text: String, timestamp: Int32) -> String {
