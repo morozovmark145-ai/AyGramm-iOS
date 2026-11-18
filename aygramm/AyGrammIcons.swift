@@ -79,6 +79,10 @@ func ayGrammKeyIcon(_ key: String) -> UIImage? {
         return ayGrammIcon("number", AyGrammColor.blue)
     case AyGrammSettings.streamerKey:
         return ayGrammIcon("video.fill", AyGrammColor.red)
+    case AyGrammSettings.filtersKey:
+        return ayGrammIcon("nosign", AyGrammColor.red)
+    case AyGrammSettings.exportKey:
+        return ayGrammIcon("tray.and.arrow.down.fill", AyGrammColor.teal)
     default:
         return ayGrammIcon("gearshape", AyGrammColor.gray)
     }
