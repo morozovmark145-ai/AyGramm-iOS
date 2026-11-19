@@ -85,6 +85,8 @@ func ayGrammKeyIcon(_ key: String) -> UIImage? {
         return ayGrammIcon("tray.and.arrow.down.fill", AyGrammColor.teal)
     case AyGrammSettings.fontButtonKey:
         return ayGrammIcon("hand.tap.fill", AyGrammColor.indigo)
+    case AyGrammSettings.fontLiveKey:
+        return ayGrammIcon("character.cursor.ibeam", AyGrammColor.purple)
     case AyGrammSettings.accountAgeKey:
         return ayGrammIcon("calendar", AyGrammColor.orange)
     case AyGrammSettings.mutualKey:
@@ -110,4 +112,46 @@ func ayGrammKeyIcon(_ key: String) -> UIImage? {
     default:
         return ayGrammIcon("gearshape", AyGrammColor.gray)
     }
+}
+
+// Логотип AyGramm для пункта «AyGramm» в настройках Telegram и для шапки меню AyGramm:
+// четыре грани буквы «A» с иконки приложения на тёмно-фиолетовом градиенте. Заменяет лампочку «Советов».
+func ayGrammLogoIcon(size side: CGFloat = 30.0) -> UIImage? {
+    let key = "aygramm-logo-\(side)" as NSString
+    if let image = ayGrammIconCache.object(forKey: key) {
+        return image
+    }
+    let size = CGSize(width: side, height: side)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    let image = renderer.image { context in
+        UIBezierPath(roundedRect: CGRect(origin: CGPoint(), size: size), cornerRadius: side * 7.0 / 30.0).addClip()
+        let colors = [UIColor(red: 0.30, green: 0.24, blue: 0.42, alpha: 1.0).cgColor, UIColor(red: 0.14, green: 0.11, blue: 0.21, alpha: 1.0).cgColor] as CFArray
+        let locations: [CGFloat] = [0.0, 1.0]
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: locations) {
+            context.cgContext.drawLinearGradient(gradient, start: CGPoint(x: 0.0, y: 0.0), end: CGPoint(x: 0.0, y: side), options: [])
+        }
+        // Координаты граней в долях стороны, сняты с AppIcon.png 1024×1024.
+        let shards: [(UInt32, [CGPoint])] = [
+            (0xe1e0e5, [CGPoint(x: 0.432, y: 0.172), CGPoint(x: 0.455, y: 0.184), CGPoint(x: 0.340, y: 0.745), CGPoint(x: 0.075, y: 0.745)]),
+            (0xd6d6df, [CGPoint(x: 0.449, y: 0.414), CGPoint(x: 0.477, y: 0.425), CGPoint(x: 0.477, y: 0.860), CGPoint(x: 0.455, y: 0.876), CGPoint(x: 0.374, y: 0.772)]),
+            (0xc3b6e3, [CGPoint(x: 0.551, y: 0.414), CGPoint(x: 0.523, y: 0.425), CGPoint(x: 0.523, y: 0.860), CGPoint(x: 0.545, y: 0.876), CGPoint(x: 0.626, y: 0.772)]),
+            (0xa991d3, [CGPoint(x: 0.568, y: 0.172), CGPoint(x: 0.545, y: 0.184), CGPoint(x: 0.660, y: 0.745), CGPoint(x: 0.925, y: 0.745)]),
+        ]
+        for (color, points) in shards {
+            let path = UIBezierPath()
+            for (index, point) in points.enumerated() {
+                let scaled = CGPoint(x: point.x * side, y: point.y * side)
+                if index == 0 {
+                    path.move(to: scaled)
+                } else {
+                    path.addLine(to: scaled)
+                }
+            }
+            path.close()
+            UIColor(red: CGFloat((color >> 16) & 0xff) / 255.0, green: CGFloat((color >> 8) & 0xff) / 255.0, blue: CGFloat(color & 0xff) / 255.0, alpha: 1.0).setFill()
+            path.fill()
+        }
+    }
+    ayGrammIconCache.setObject(image, forKey: key)
+    return image
 }
