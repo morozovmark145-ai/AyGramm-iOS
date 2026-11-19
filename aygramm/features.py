@@ -459,7 +459,7 @@ replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
         "            let ayGrammProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n"
         "            actions.append(.action(ContextMenuActionItem(text: \"AyGramm\", icon: { theme in\n"
         "                return generateTintedImage(image: UIImage(systemName: \"sparkles\"), color: theme.actionSheet.primaryTextColor)\n"
-        "            }, action: { [weak controllerInteraction] c, _ in\n"
+        "            }, action: { c, _ in\n"
         "                let ayGrammItems = ayGrammChatMenuItems(context: context, message: ayGrammMessage, peer: ayGrammPeer, isCopyProtected: ayGrammProtected, navigate: { id in\n"
         "                    controllerInteraction?.navigateToMessage(ayGrammMessage.id, id, NavigateToMessageParams())\n"
         "                }, present: { controller in\n"
