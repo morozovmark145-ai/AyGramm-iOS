@@ -49,7 +49,7 @@ def wrap(rel, line_pattern, condition, count):
 
 # Новые файлы.
 (ROOT / CORE / "AyGramm").mkdir(parents=True, exist_ok=True)
-for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift", "AyGrammVoice.swift", "AyGrammTools.swift", "AyGrammFilters.swift"]:
+for name in ["AyGrammSettings.swift", "AyGrammCommunity.swift", "AyGrammPlugins.swift", "AyGrammNetwork.swift", "AyGrammDecorations.swift", "AyGrammFonts.swift", "AyGrammVoice.swift", "AyGrammTools.swift", "AyGrammFilters.swift", "AyGrammExtras.swift", "AyGrammAutoReply.swift"]:
     shutil.copy(ROOT / "aygramm" / name, ROOT / CORE / "AyGramm" / name)
 shutil.copy(ROOT / "aygramm/AyGrammSettingsController.swift", ROOT / PEER / "AyGrammSettingsController.swift")
 shutil.copy(ROOT / "aygramm/AyGrammDecorationsController.swift", ROOT / PEER / "AyGrammDecorationsController.swift")
@@ -57,6 +57,7 @@ shutil.copy(ROOT / "aygramm/AyGrammBuiltinController.swift", ROOT / PEER / "AyGr
 shutil.copy(ROOT / "aygramm/AyGrammIcons.swift", ROOT / PEER / "AyGrammIcons.swift")
 shutil.copy(ROOT / "aygramm/AyGrammStartup.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammStartup.swift")
 shutil.copy(ROOT / "aygramm/AyGrammKeepAlive.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammKeepAlive.swift")
+shutil.copy(ROOT / "aygramm/AyGrammActions.swift", ROOT / "submodules/TelegramUI/Sources/AyGrammActions.swift")
 
 # Метки удалённых сообщений и истории правок хранятся в базе сообщений, их тип надо зарегистрировать.
 replace(f"{CORE}/Account/AccountManager.swift",
@@ -70,11 +71,15 @@ replace(f"{CORE}/State/Sync/StateReplay+Messages.swift",
         "            return .update(mergedServerMessageUpdate(previous: previousMessage, updated: message))\n",
         "            return .update(ayGrammWithEditHistory(previous: previousMessage, updated: mergedServerMessageUpdate(previous: previousMessage, updated: message)))\n")
 
-# Плагины меняют текст исходящих сообщений перед отправкой.
+# Плагины меняют текст исходящих сообщений перед отправкой. Режим из меню «Отправить» (бомба, перевод,
+# шифровка, голос) получает текст без шрифтов и плагинов, меняет сообщения и отправляет их сюда же ещё раз.
 replace(f"{CORE}/PendingMessages/EnqueueMessage.swift",
         "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n",
         "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
-        "    let messages = ayGrammTransformOutgoing(messages)\n"
+        "    let messages = ayGrammTransformOutgoing(messages, peerId: peerId)\n"
+        "    if let ayGrammSpecial = ayGrammSpecialSend(account: account, peerId: peerId, messages: messages) {\n"
+        "        return ayGrammSpecial\n"
+        "    }\n"
         "    ayGrammAfterSend(account: account)\n")
 
 # Удалённое сообщение полупрозрачное; переход в это состояние плавный, 0.4 с.
@@ -349,6 +354,16 @@ replace(PITEMS, "        if let phone = user.phone {\n            let formattedP
         "                interaction.requestLayout(animated)\n"
         "            }))\n"
         "        }\n"
+        "        if AyGrammSettings.value(AyGrammSettings.accountAgeKey) {\n"
+        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 3101, label: \"Аккаунт создан\", text: AyGrammAccountAge.describe(userId: user.id.id._internalGetInt64Value()), textColor: .primary, action: nil, requestLayout: { animated in\n"
+        "                interaction.requestLayout(animated)\n"
+        "            }))\n"
+        "        }\n"
+        "        if AyGrammSettings.value(AyGrammSettings.mutualKey), let ayGrammMutual = AyGrammMutual.describe(user: user, isContact: data.isContact) {\n"
+        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 3102, label: \"Контакт\", text: ayGrammMutual, textColor: .primary, action: nil, requestLayout: { animated in\n"
+        "                interaction.requestLayout(animated)\n"
+        "            }))\n"
+        "        }\n"
         "        if let phone = user.phone, !AyGrammSettings.value(AyGrammSettings.streamerKey) {\n"
         "            let formattedPhone = formatPhoneNumber(context: context, number: phone)\n")
 replace(f"{PEER}/PeerInfoHeaderNode.swift", "                var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? \"\")\n",
@@ -410,6 +425,60 @@ replace("submodules/ChatSendMessageActionUI/Sources/ChatSendMessageContextScreen
         "                        }\n"
         "                    )))\n"
         "                }\n"
+        "                if let ayGrammPeerId = component.peerId, textString.length != 0, mediaPreview == nil, !sendMessage.isScheduledMessages {\n"
+        "                    for ayGrammItem in AyGrammOutgoing.menuItems(peerId: ayGrammPeerId) {\n"
+        "                        items.append(.action(ContextMenuActionItem(\n"
+        "                            id: AnyHashable(\"aygramm.\" + ayGrammItem.id),\n"
+        "                            text: ayGrammItem.title,\n"
+        "                            icon: { theme in\n"
+        "                                return generateTintedImage(image: UIImage(systemName: ayGrammItem.icon), color: theme.contextMenu.primaryColor)\n"
+        "                            }, action: { [weak self] _, _ in\n"
+        "                                guard let self, let component = self.component else {\n"
+        "                                    return\n"
+        "                                }\n"
+        "                                AyGrammOutgoing.arm(ayGrammItem.mode, peerId: ayGrammPeerId)\n"
+        "                                self.animateOutToEmpty = true\n"
+        "                                let sendParameters = ChatSendMessageActionSheetController.SendParameters(\n"
+        "                                    effect: self.selectedMessageEffect.flatMap({ ChatSendMessageActionSheetController.SendParameters.Effect(id: $0.id) }),\n"
+        "                                    textIsAboveMedia: self.mediaCaptionIsAbove\n"
+        "                                )\n"
+        "                                component.sendMessage(.generic, sendParameters)\n"
+        "                                self.environment?.controller()?.dismiss()\n"
+        "                            }\n"
+        "                        )))\n"
+        "                    }\n"
+        "                }\n"
         "                if !reminders {\n")
+
+# Подменю AyGramm в меню сообщения: статистика, первое сообщение, скриншот, кружок, стирание своих сообщений, автоответ.
+replace("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n",
+        "        if AyGrammSettings.value(AyGrammSettings.chatToolsKey) && message.id.namespace == Namespaces.Message.Cloud {\n"
+        "            let ayGrammMessage = EngineMessage(message)\n"
+        "            let ayGrammPeer = chatPresentationInterfaceState.renderedPeer?.peer.flatMap { EnginePeer($0) }\n"
+        "            let ayGrammProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"AyGramm\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(systemName: \"sparkles\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { [weak controllerInteraction] c, _ in\n"
+        "                let ayGrammItems = ayGrammChatMenuItems(context: context, message: ayGrammMessage, peer: ayGrammPeer, isCopyProtected: ayGrammProtected, navigate: { id in\n"
+        "                    controllerInteraction?.navigateToMessage(ayGrammMessage.id, id, NavigateToMessageParams())\n"
+        "                }, present: { controller in\n"
+        "                    controllerInteraction?.presentController(controller, nil)\n"
+        "                }, toast: { text in\n"
+        "                    controllerInteraction?.displayUndo(.info(title: nil, text: text, timeout: nil, customUndoText: nil))\n"
+        "                })\n"
+        "                c?.pushItems(items: .single(ContextController.Items(content: .list(ayGrammItems))))\n"
+        "            })))\n"
+        "        }\n"
+        "        let isCopyProtected = chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()\n")
+
+# Шифровка AyGramm: пузырь показывает расшифрованный текст, если пароль совпадает.
+replace("submodules/TelegramUI/Components/Chat/ChatMessageTextBubbleContentNode/Sources/ChatMessageTextBubbleContentNode.swift",
+        "                    let translateToLanguage = item.associatedData.translateToLanguage\n",
+        "                    if let ayGrammPlain = AyGrammCipher.displayText(rawText) {\n"
+        "                        rawText = ayGrammPlain\n"
+        "                        messageEntities = nil\n"
+        "                    }\n"
+        "                    let translateToLanguage = item.associatedData.translateToLanguage\n")
 
 print("AyGramm: все правки применены")
