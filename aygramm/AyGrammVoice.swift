@@ -1,7 +1,7 @@
 import Foundation
 
 // Встроенный плагин «Изменение голоса»: голосовое сообщение меняет звучание ещё при записи.
-// Запись идёт пакетами по 960 отсчётов (16 кГц, 16 бит, моно). Эффект меняет отсчёты до кодека Opus,
+// Запись идёт пакетами по 960 отсчётов (48 кГц, 16 бит, моно). Эффект меняет отсчёты до кодека Opus,
 // поэтому собеседник слышит уже изменённый голос, а прослушивание перед отправкой звучит так же.
 public enum AyGrammVoice {
     static let key = "AyGrammVoiceEffect"
@@ -52,21 +52,30 @@ public enum AyGrammVoice {
         }
         lastPacketTime = now
     }
+
+    // Весь звук сразу, для «Отправить голосом»: эффект начинает с чистого состояния.
+    public static func processWhole(_ samples: UnsafeMutablePointer<Int16>, count: Int) {
+        let effect = selectedIndex
+        if effect == 0 || count == 0 {
+            return
+        }
+        AyGrammVoiceProcessor(effect: effect).process(samples, count: count)
+    }
 }
 
 final class AyGrammVoiceProcessor {
     let effect: Int
     let ratio: Double
     // Сдвиг высоты: две читающие головки идут по кольцевому буферу со скоростью ratio
-    // и плавно сменяют друг друга в окне 100 мс, поэтому скорость речи не меняется.
-    let window: Double = 1600.0
-    var buffer = [Float](repeating: 0.0, count: 4096)
+    // и плавно сменяют друг друга в окне 100 мс (4800 отсчётов), поэтому скорость речи не меняется.
+    let window: Double = 4800.0
+    var buffer = [Float](repeating: 0.0, count: 8192)
     var writeIndex = 0
     var delay: Double = 0.0
-    // Эхо: задержка 4000 отсчётов, это 0,25 секунды.
-    var echo = [Float](repeating: 0.0, count: 4000)
+    // Эхо: задержка 12000 отсчётов, это 0,25 секунды.
+    var echo = [Float](repeating: 0.0, count: 12000)
     var echoIndex = 0
-    // Робот: умножение на синус 60 Гц, за 16000 отсчётов проходит ровно 60 периодов.
+    // Робот: умножение на синус 60 Гц, за 48000 отсчётов проходит ровно 60 периодов.
     var robotPhase = 0
 
     init(effect: Int) {
@@ -124,9 +133,9 @@ final class AyGrammVoiceProcessor {
             case 1, 2, 3, 4:
                 output = self.shift(input)
             case 5:
-                let angle = 2.0 * Float.pi * 60.0 * Float(self.robotPhase) / 16000.0
+                let angle = 2.0 * Float.pi * 60.0 * Float(self.robotPhase) / 48000.0
                 output = input * (0.25 + 0.75 * sin(angle))
-                self.robotPhase = (self.robotPhase + 1) % 16000
+                self.robotPhase = (self.robotPhase + 1) % 48000
             case 6:
                 let delayed = self.echo[self.echoIndex]
                 output = input + 0.5 * delayed
