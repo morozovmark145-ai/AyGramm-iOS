@@ -154,12 +154,12 @@ replace(f"{CORE}/State/ManagedAccountPresence.swift",
 # «Печатает…».
 guard(f"{CORE}/State/ManagedLocalInputActivities.swift",
       r"return network\.request\(Api\.functions\.messages\.(?:setTyping|setEncryptedTyping)\(",
-      "AyGrammSettings.hideTyping", "return .complete()", 2)
+      "AyGrammSettings.hideTyping && !AyGrammGhost.isException(peerId)", "return .complete()", 2)
 
 # Прочтение в обычных чатах, группах, каналах и секретных чатах.
 guard(f"{CORE}/State/SynchronizePeerReadState.swift",
       r"(?:var pushSignal: Signal<Void, NoError> = |return )network\.request\(Api\.functions\.(?:channels\.readHistory|messages\.readHistory|messages\.readEncryptedHistory)\(",
-      "AyGrammSettings.hideRead", "return .single(readState)", 3)
+      "AyGrammSettings.hideRead && !AyGrammGhost.isException(peerId)", "return .single(readState)", 3)
 
 # Прочтение в темах форумов и комментариях.
 wrap(f"{CORE}/TelegramEngine/Messages/ApplyMaxReadIndexInteractively.swift",
@@ -501,5 +501,14 @@ with open(ROOT / INPUT, "a", encoding="utf-8") as f:
             "    }\n"
             "    return ChatTextInputState(inputText: ayGrammResult.0, selectionRange: ayGrammResult.1)\n"
             "}\n")
+
+# Своя заметка о человеке в профиле (задаётся в меню сообщения → AyGramm).
+replace(PITEMS, "        if let phone = user.phone, !AyGrammSettings.value(AyGrammSettings.streamerKey) {\n",
+        "        if let ayGrammNote = AyGrammNotes.note(user.id) {\n"
+        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 3103, label: \"Ваша заметка\", text: ayGrammNote, textColor: .primary, action: nil, requestLayout: { animated in\n"
+        "                interaction.requestLayout(animated)\n"
+        "            }))\n"
+        "        }\n"
+        "        if let phone = user.phone, !AyGrammSettings.value(AyGrammSettings.streamerKey) {\n")
 
 print("AyGramm: все правки применены")
