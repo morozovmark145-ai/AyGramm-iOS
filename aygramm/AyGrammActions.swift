@@ -805,6 +805,88 @@ func ayGrammChatMenuItems(context: AccountContext, message: EngineMessage, peer:
             })
         })))
     }
+    // Исключение режима призрака: в этом чате прочтение и «печатает…» уходят как обычно.
+    if AyGrammSettings.hideRead || AyGrammSettings.hideTyping || AyGrammGhost.isException(peerId) {
+        let isException = AyGrammGhost.isException(peerId)
+        items.append(.action(ContextMenuActionItem(text: isException ? "Призрак в этом чате" : "Обычный режим в этом чате", icon: ayGrammMenuIcon(isException ? "theatermasks.fill" : "eye.fill"), action: { c, _ in
+            AyGrammGhost.setException(peerId, !isException)
+            c?.dismiss(completion: {
+                toast(isException ? "Режим призрака снова действует в этом чате." : "В этом чате прочтение и «печатает…» видны собеседнику.")
+            })
+        })))
+    }
+    // Напоминание: отложенное сообщение в «Избранное» с текстом и ссылкой на сообщение.
+    items.append(.action(ContextMenuActionItem(text: "Напомнить", icon: ayGrammMenuIcon("bell.fill"), action: { c, _ in
+        var subItems: [ContextMenuItem] = [ayGrammBackItem(presentationData), .separator]
+        let now = Int32(Date().timeIntervalSince1970)
+        var tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        tomorrow = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+        let options: [(String, Int32)] = [("Через 1 час", now + 3600), ("Через 3 часа", now + 3 * 3600), ("Завтра в 9:00", Int32(tomorrow.timeIntervalSince1970)), ("Через неделю", now + 7 * 86400)]
+        for (title, time) in options {
+            subItems.append(.action(ContextMenuActionItem(text: title, icon: { _ in
+                return nil
+            }, action: { innerController, _ in
+                innerController?.dismiss(completion: {
+                    let _ = (AyGrammRemind.schedule(account: context.account, text: AyGrammRemind.text(message: message, peer: peer), at: time)
+                    |> deliverOnMainQueue).start(next: { done in
+                        toast(done ? "Напоминание придёт в «Избранное»: \(title.lowercased())." : "Не удалось поставить напоминание.")
+                    })
+                })
+            })))
+        }
+        c?.pushItems(items: .single(ContextController.Items(content: .list(subItems))))
+    })))
+    // Заметка о человеке или чате: видна только на этом телефоне.
+    let note = AyGrammNotes.note(peerId)
+    let noteTitle = peerId.namespace == Namespaces.Peer.CloudUser ? "Заметка о человеке" : "Заметка о чате"
+    items.append(.action(ContextMenuActionItem(text: note == nil ? noteTitle : "Изменить заметку", icon: ayGrammMenuIcon("note.text"), action: { c, _ in
+        c?.dismiss(completion: {
+            let alert = UIAlertController(title: noteTitle, message: "Видна только вам, в профиле и в этом меню. Пустой текст удалит заметку.", preferredStyle: .alert)
+            alert.addTextField(configurationHandler: { field in
+                field.text = note
+                field.placeholder = "Например: друг брата, вернуть книгу"
+                field.autocapitalizationType = .sentences
+            })
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+            alert.addAction(UIAlertAction(title: "Сохранить", style: .default, handler: { [weak alert] _ in
+                let text = alert?.textFields?.first?.text ?? ""
+                AyGrammNotes.setNote(peerId, text)
+                toast(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Заметка удалена." : "Заметка сохранена.")
+            }))
+            context.sharedContext.mainWindow?.presentNative(alert)
+        })
+    })))
+    // Голосовое, кружок или музыка файлом через «Поделиться». В чатах с запретом копирования пункта нет.
+    var shareFile: TelegramMediaFile?
+    for media in message.media {
+        if let file = media as? TelegramMediaFile, file.isVoice || file.isInstantVideo || file.isMusic {
+            shareFile = file
+        }
+    }
+    if !isCopyProtected, let file = shareFile {
+        items.append(.action(ContextMenuActionItem(text: file.isInstantVideo ? "Кружок файлом" : (file.isVoice ? "Голосовое файлом" : "Музыку файлом"), icon: ayGrammMenuIcon("square.and.arrow.down.fill"), action: { c, _ in
+            c?.dismiss(completion: {
+                guard let path = AyGrammFiles.completedPath(account: context.account, file: file) else {
+                    toast("Файл ещё не скачан. Включите сообщение и попробуйте снова.")
+                    return
+                }
+                var ext = file.isInstantVideo ? "mp4" : "ogg"
+                if file.isMusic {
+                    let named = ((file.fileName ?? "") as NSString).pathExtension
+                    ext = named.isEmpty ? "mp3" : named
+                }
+                let target = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("AyGramm-\(message.id.id).\(ext)")
+                try? FileManager.default.removeItem(at: target)
+                do {
+                    try FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: target)
+                } catch {
+                    toast("Не удалось подготовить файл.")
+                    return
+                }
+                context.sharedContext.mainWindow?.presentNative(UIActivityViewController(activityItems: [target], applicationActivities: nil))
+            })
+        })))
+    }
     if ayGrammIsGroup(peer) {
         items.append(.action(ContextMenuActionItem(text: "Стереть мои сообщения", textColor: .destructive, icon: { theme in
             return generateTintedImage(image: UIImage(systemName: "trash.fill"), color: theme.actionSheet.destructiveActionTextColor)
