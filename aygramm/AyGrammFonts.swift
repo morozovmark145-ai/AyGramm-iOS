@@ -296,6 +296,70 @@ public enum AyGrammFonts {
         return style.prefix + body + style.suffix
     }
 
+    // Шрифт при наборе: готовое слово (после пробела или переноса строки) сразу меняет вид в поле ввода.
+    // Слово под курсором ждёт, поэтому автозамена iOS работает как обычно. Только начертания с таблицей
+    // замены: повторная замена их не меняет, и отправка не портит уже изменённые слова.
+    // Слово с разным форматированием внутри (эмодзи из набора, ссылка) не меняется.
+    public static func liveTransform(_ text: NSAttributedString, selection: Range<Int>) -> (NSAttributedString, Range<Int>)? {
+        guard AyGrammSettings.value(AyGrammSettings.fontLiveKey), let style = selected, style.entity == nil, style.mark.isEmpty, style.separator.isEmpty, style.prefix.isEmpty, style.suffix.isEmpty, !reversedBases.contains(style.base), selection.isEmpty else {
+            return nil
+        }
+        let string = text.string as NSString
+        let length = string.length
+        let cursor = selection.lowerBound
+        if length == 0 || cursor > length {
+            return nil
+        }
+        var words: [NSRange] = []
+        var index = 0
+        while index < length {
+            if isSpace(string.character(at: index)) {
+                index += 1
+                continue
+            }
+            let start = index
+            while index < length && !isSpace(string.character(at: index)) {
+                index += 1
+            }
+            words.append(NSRange(location: start, length: index - start))
+        }
+        let result = NSMutableAttributedString(attributedString: text)
+        var shift = 0
+        var changed = false
+        for range in words.reversed() {
+            if range.location <= cursor && cursor <= range.location + range.length {
+                continue
+            }
+            var effective = NSRange()
+            _ = text.attributes(at: range.location, longestEffectiveRange: &effective, in: range)
+            if effective.length != range.length {
+                continue
+            }
+            let word = string.substring(with: range)
+            if isProtected(Substring(word)) {
+                continue
+            }
+            let styled = transformWord(Substring(word), style: style)
+            if styled == word {
+                continue
+            }
+            result.replaceCharacters(in: range, with: styled)
+            if range.location + range.length <= cursor {
+                shift += (styled as NSString).length - range.length
+            }
+            changed = true
+        }
+        if !changed {
+            return nil
+        }
+        let output: NSAttributedString = result
+        return (output, cursor + shift ..< cursor + shift)
+    }
+
+    static func isSpace(_ unit: unichar) -> Bool {
+        return unit == 0x20 || unit == 0x0A || unit == 0x09 || unit == 0x0D || unit == 0xA0 || unit == 0x2028 || unit == 0x2029
+    }
+
     // Образец для меню выбора.
     public static func sample(_ index: Int) -> String {
         guard index >= 0 && index < styles.count else {
