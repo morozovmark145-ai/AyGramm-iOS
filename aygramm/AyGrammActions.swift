@@ -24,6 +24,85 @@ func ayGrammInstallActions() {
     AyGrammOutgoing.voiceRenderer = { text, completion in
         AyGrammTextToVoice.render(text, completion: completion)
     }
+    AyGrammVoice.previewPlayer = { effect in
+        AyGrammVoicePreview.play(effect: effect)
+    }
+}
+
+// MARK: - Образец эффекта голоса
+
+// Фраза-образец читается голосом iOS один раз, потом каждый выбор эффекта проигрывает её с этим эффектом.
+final class AyGrammVoicePreview {
+    private static var cached: [Int16]?
+    private static var waiting: Int?
+    private static var player: AVAudioPlayer?
+
+    static func play(effect: Int) {
+        if let cached = cached {
+            start(cached, effect: effect)
+            return
+        }
+        if waiting != nil {
+            waiting = effect
+            return
+        }
+        waiting = effect
+        AyGrammTextToVoice.renderSamples("Привет! Так звучит мой голос в AyGramm.", completion: { samples, rate in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let pcm = AyGrammTextToVoice.resample(samples, rate: rate)
+                DispatchQueue.main.async {
+                    let latest = AyGrammVoicePreview.waiting ?? effect
+                    AyGrammVoicePreview.waiting = nil
+                    if let pcm = pcm {
+                        AyGrammVoicePreview.cached = pcm
+                        AyGrammVoicePreview.start(pcm, effect: latest)
+                    }
+                }
+            }
+        })
+    }
+
+    private static func start(_ source: [Int16], effect: Int) {
+        var pcm = source
+        pcm.withUnsafeMutableBufferPointer { buffer -> Void in
+            if let base = buffer.baseAddress {
+                AyGrammVoice.processWhole(base, count: buffer.count, effect: effect)
+            }
+        }
+        player?.stop()
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
+        try? AVAudioSession.sharedInstance().setActive(true)
+        player = try? AVAudioPlayer(data: wav(pcm))
+        player?.play()
+    }
+
+    // Файл WAV: 48 кГц, 16 бит, моно.
+    private static func wav(_ pcm: [Int16]) -> Data {
+        var data = Data()
+        func append32(_ value: UInt32) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
+        }
+        func append16(_ value: UInt16) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
+        }
+        let byteCount = UInt32(pcm.count * 2)
+        data.append(contentsOf: Array("RIFF".utf8))
+        append32(36 + byteCount)
+        data.append(contentsOf: Array("WAVEfmt ".utf8))
+        append32(16)
+        append16(1)
+        append16(1)
+        append32(48000)
+        append32(96000)
+        append16(2)
+        append16(16)
+        data.append(contentsOf: Array("data".utf8))
+        append32(byteCount)
+        pcm.withUnsafeBytes { data.append(contentsOf: $0) }
+        return data
+    }
 }
 
 // MARK: - Отправить голосом
@@ -35,17 +114,26 @@ final class AyGrammTextToVoice {
     private static var active: [AyGrammTextToVoice] = []
 
     private let synthesizer = AVSpeechSynthesizer()
-    private let completion: ((Data, Int, Data?)?) -> Void
+    private let completion: ([Float], Double) -> Void
     private var samples: [Float] = []
     private var sampleRate: Double = 22050.0
     private var finished = false
     private var lastBuffer = CACurrentMediaTime()
 
-    private init(completion: @escaping ((Data, Int, Data?)?) -> Void) {
+    private init(completion: @escaping ([Float], Double) -> Void) {
         self.completion = completion
     }
 
     static func render(_ text: String, completion: @escaping ((Data, Int, Data?)?) -> Void) {
+        renderSamples(text, completion: { samples, rate in
+            DispatchQueue.global(qos: .userInitiated).async {
+                completion(AyGrammTextToVoice.encode(samples: samples, rate: rate))
+            }
+        })
+    }
+
+    // Звук голоса iOS без кодека: отсчёты и их частота.
+    static func renderSamples(_ text: String, completion: @escaping ([Float], Double) -> Void) {
         DispatchQueue.main.async {
             let renderer = AyGrammTextToVoice(completion: completion)
             active.append(renderer)
@@ -137,12 +225,11 @@ final class AyGrammTextToVoice {
         let rate = self.sampleRate
         let completion = self.completion
         AyGrammTextToVoice.active.removeAll(where: { $0 === self })
-        DispatchQueue.global(qos: .userInitiated).async {
-            completion(AyGrammTextToVoice.encode(samples: samples, rate: rate))
-        }
+        completion(samples, rate)
     }
 
-    static func encode(samples: [Float], rate: Double) -> (Data, Int, Data?)? {
+    // Перевод в 48 кГц и 16 бит. Меньше 0,1 секунды звука считается пустой озвучкой.
+    static func resample(_ samples: [Float], rate: Double) -> [Int16]? {
         if samples.isEmpty || rate <= 0.0 {
             return nil
         }
@@ -160,6 +247,13 @@ final class AyGrammTextToVoice {
             let fraction = Float(min(1.0, position - Double(lower)))
             let value = samples[lower] + (samples[upper] - samples[lower]) * fraction
             pcm[index] = Int16(max(-1.0, min(1.0, value)) * 32767.0)
+        }
+        return pcm
+    }
+
+    static func encode(samples: [Float], rate: Double) -> (Data, Int, Data?)? {
+        guard var pcm = resample(samples, rate: rate) else {
+            return nil
         }
         pcm.withUnsafeMutableBufferPointer { buffer -> Void in
             if let base = buffer.baseAddress {
