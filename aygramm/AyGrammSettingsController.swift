@@ -9,11 +9,14 @@ import AccountContext
 import PresentationDataUtils
 import LegacyMediaPickerUI
 
-// Меню AyGramm в настройках: режим призрака, удалённые и изменённые сообщения, плагины,
-// сообщество (канал, подписка, счётчик скачиваний, версия) и админ-панель для владельца канала.
+// Меню AyGramm в настройках: шапка с логотипом и «Что нового», режим призрака с общим переключателем,
+// разделы функций, удалённые сообщения, плагины, сообщество и админ-панель для владельца канала.
 
 private final class AyGrammSettingsControllerArguments {
     let toggle: (String, Bool) -> Void
+    let toggleGhost: (Bool) -> Void
+    let openWhatsNew: () -> Void
+    let openCategory: (String, [Int32]) -> Void
     let openDeleted: () -> Void
     let openPlugins: () -> Void
     let openDecorations: () -> Void
@@ -22,8 +25,11 @@ private final class AyGrammSettingsControllerArguments {
     let openUpdate: () -> Void
     let openAdmin: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDeleted: @escaping () -> Void, openPlugins: @escaping () -> Void, openDecorations: @escaping () -> Void, openChannel: @escaping () -> Void, joinChannel: @escaping () -> Void, openUpdate: @escaping () -> Void, openAdmin: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, openWhatsNew: @escaping () -> Void, openCategory: @escaping (String, [Int32]) -> Void, openDeleted: @escaping () -> Void, openPlugins: @escaping () -> Void, openDecorations: @escaping () -> Void, openChannel: @escaping () -> Void, joinChannel: @escaping () -> Void, openUpdate: @escaping () -> Void, openAdmin: @escaping () -> Void) {
         self.toggle = toggle
+        self.toggleGhost = toggleGhost
+        self.openWhatsNew = openWhatsNew
+        self.openCategory = openCategory
         self.openDeleted = openDeleted
         self.openPlugins = openPlugins
         self.openDecorations = openDecorations
@@ -42,17 +48,24 @@ private enum AyGrammSettingsSection: Int32 {
     case community
     case admin
     case background
+    case hero
+    case categories
 }
+
+// Ключи режима призрака: общий переключатель включает и выключает все четыре сразу.
+private let ayGrammGhostKeys: [String] = [AyGrammSettings.hideOnlineKey, AyGrammSettings.hideReadKey, AyGrammSettings.hideTypingKey, AyGrammSettings.hideStoryViewsKey]
 
 private struct AyGrammSettingsState: Equatable {
     var values: [String: Bool]
+    // Растёт после изменений в разделах: подписи категорий (шрифт, голос, автоответ) читаются заново.
+    var refresh: Int
 
-    static func current() -> AyGrammSettingsState {
+    static func current(refresh: Int = 0) -> AyGrammSettingsState {
         var values: [String: Bool] = [:]
-        for key in [AyGrammSettings.hideOnlineKey, AyGrammSettings.hideReadKey, AyGrammSettings.hideTypingKey, AyGrammSettings.hideStoryViewsKey, AyGrammSettings.saveDeletedKey, AyGrammSettings.saveEditsKey, AyGrammSettings.silentSendKey, AyGrammSettings.pluginsEnabledKey, AyGrammSettings.keepAliveKey] {
+        for key in AyGrammSettings.profileKeys {
             values[key] = AyGrammSettings.storedValue(key)
         }
-        return AyGrammSettingsState(values: values)
+        return AyGrammSettingsState(values: values, refresh: refresh)
     }
 
     func value(_ key: String) -> Bool {
@@ -62,15 +75,19 @@ private struct AyGrammSettingsState: Equatable {
 
 private enum AyGrammSettingsEntry: ItemListNodeEntry {
     case bannedInfo
+    case hero(String, String)
     case ghostHeader
+    case ghostAll(Bool)
     case toggle(Int32, AyGrammSettingsSection, String, String, Bool)
     case ghostFooter
+    case categoriesHeader
+    case category(Int32, String, String, String, UInt32, [Int32])
+    case categoriesFooter
     case messagesHeader
     case deleted(String)
     case messagesFooter
     case pluginsHeader
     case plugins
-    case decorations
     case pluginsFooter
     case communityHeader
     case channel
@@ -80,75 +97,79 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
     case communityFooter
     case adminHeader
     case admin
-    case backgroundHeader
-    case backgroundFooter
 
     var section: ItemListSectionId {
         switch self {
         case .bannedInfo:
             return AyGrammSettingsSection.banned.rawValue
-        case .ghostHeader, .ghostFooter:
+        case .hero:
+            return AyGrammSettingsSection.hero.rawValue
+        case .ghostHeader, .ghostAll, .ghostFooter:
             return AyGrammSettingsSection.ghost.rawValue
         case let .toggle(_, section, _, _, _):
             return section.rawValue
+        case .categoriesHeader, .category, .categoriesFooter:
+            return AyGrammSettingsSection.categories.rawValue
         case .messagesHeader, .deleted, .messagesFooter:
             return AyGrammSettingsSection.messages.rawValue
-        case .pluginsHeader, .plugins, .decorations, .pluginsFooter:
+        case .pluginsHeader, .plugins, .pluginsFooter:
             return AyGrammSettingsSection.plugins.rawValue
         case .communityHeader, .channel, .join, .downloads, .version, .communityFooter:
             return AyGrammSettingsSection.community.rawValue
         case .adminHeader, .admin:
             return AyGrammSettingsSection.admin.rawValue
-        case .backgroundHeader, .backgroundFooter:
-            return AyGrammSettingsSection.background.rawValue
         }
     }
 
-    // Порядок: бан 0, звонки в фоне 1–9, призрак 10–19, сообщения 20–29, плагины 30–39, сообщество 40–49, автор 50–59.
+    // Порядок: бан 0, шапка 2, призрак 10–19, разделы 20–29, сообщения 30–39, плагины 40–49, сообщество 50–59, автор 60–69.
     var stableId: Int32 {
         switch self {
         case .bannedInfo:
             return 0
+        case .hero:
+            return 2
         case .ghostHeader:
             return 10
+        case .ghostAll:
+            return 11
         case let .toggle(id, _, _, _, _):
             return id
         case .ghostFooter:
             return 19
-        case .messagesHeader:
+        case .categoriesHeader:
             return 20
-        case .deleted:
-            return 27
-        case .messagesFooter:
+        case let .category(id, _, _, _, _, _):
+            return id
+        case .categoriesFooter:
             return 29
-        case .pluginsHeader:
+        case .messagesHeader:
             return 30
-        case .plugins:
-            return 32
-        case .decorations:
-            return 33
-        case .pluginsFooter:
+        case .deleted:
+            return 37
+        case .messagesFooter:
             return 39
-        case .communityHeader:
+        case .pluginsHeader:
             return 40
-        case .channel:
-            return 41
-        case .join:
+        case .plugins:
             return 42
-        case .downloads:
-            return 43
-        case .version:
-            return 44
-        case .communityFooter:
+        case .pluginsFooter:
             return 49
-        case .adminHeader:
+        case .communityHeader:
             return 50
-        case .admin:
+        case .channel:
             return 51
-        case .backgroundHeader:
-            return 1
-        case .backgroundFooter:
-            return 9
+        case .join:
+            return 52
+        case .downloads:
+            return 53
+        case .version:
+            return 54
+        case .communityFooter:
+            return 59
+        case .adminHeader:
+            return 60
+        case .admin:
+            return 61
         }
     }
 
@@ -161,14 +182,30 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
         switch self {
         case .bannedInfo:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Автор AyGramm заблокировал этот аккаунт в канале @augrammipa. Режим призрака, удалённые сообщения и плагины выключены."), sectionId: self.section)
+        case let .hero(title, label):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammLogoIcon(), title: title, label: label, sectionId: self.section, style: .blocks, action: {
+                arguments.openWhatsNew()
+            })
         case .ghostHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "РЕЖИМ ПРИЗРАКА", sectionId: self.section)
+        case let .ghostAll(value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("theatermasks.fill", AyGrammColor.indigo), title: "Призрак целиком", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleGhost(value)
+            })
         case let .toggle(_, _, key, title, value):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammKeyIcon(key), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(key, value)
             })
         case .ghostFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Собеседники не видят включённые пункты. Отметить чат прочитанным: зажмите сообщение → «Отправить прочтение». Ответ в чате Telegram сам отмечает прочитанным."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("«Призрак целиком» включает и выключает все 4 пункта сразу. Отметить чат прочитанным: зажмите сообщение → «Отправить прочтение». Ответ в чате сам отмечает прочитанным."), sectionId: self.section)
+        case .categoriesHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ФУНКЦИИ", sectionId: self.section)
+        case let .category(_, title, label, symbol, color, sections):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon(symbol, color), title: title, label: label, sectionId: self.section, style: .blocks, action: {
+                arguments.openCategory(title, sections)
+            })
+        case .categoriesFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Каждый раздел открывает свои переключатели. «Все функции» показывает их одним списком."), sectionId: self.section)
         case .messagesHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "СООБЩЕНИЯ", sectionId: self.section)
         case let .deleted(count):
@@ -183,12 +220,8 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("puzzlepiece.fill", AyGrammColor.green), title: "Плагины", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openPlugins()
             })
-        case .decorations:
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("square.grid.2x2.fill", AyGrammColor.indigo), title: "Встроенные плагины", label: "", sectionId: self.section, style: .blocks, action: {
-                arguments.openDecorations()
-            })
         case .pluginsFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины меняют только текст ваших исходящих сообщений и не видят переписку. Встроенные: звонки в фоне, 213 шрифтов, украшения, аккаунты без лимита."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Плагины меняют только текст ваших исходящих сообщений и не видят переписку."), sectionId: self.section)
         case .communityHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "СООБЩЕСТВО", sectionId: self.section)
         case .channel:
@@ -209,10 +242,6 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(AyGrammCommunity.consentText + " Счётчик скачиваний открытый: это число скачиваний файла на GitHub."), sectionId: self.section)
         case .adminHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "АВТОР", sectionId: self.section)
-        case .backgroundHeader:
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ЗВОНКИ И УВЕДОМЛЕНИЯ", sectionId: self.section)
-        case .backgroundFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Push-уведомления Telegram не доходят до переподписанного AyGramm, поэтому свёрнутый AyGramm засыпает. С этим режимом он держит связь с Telegram в фоне: звонки приходят на экран вызова iOS, о сообщениях приходит уведомление. Батарея садится быстрее. Если смахнуть AyGramm из списка приложений, режим выключится до следующего запуска."), sectionId: self.section)
         case .admin:
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("lock.shield.fill", AyGrammColor.red), title: "Админ-панель", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openAdmin()
@@ -226,22 +255,34 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
     if isBanned {
         entries.append(.bannedInfo)
     }
+    let enabledCount = AyGrammSettings.profileKeys.filter { state.value($0) }.count
+    entries.append(.hero("AyGramm 0.\(AyGrammSettings.currentVersion)", "вкл. \(enabledCount) · что нового"))
     entries.append(.ghostHeader)
-    entries.append(.toggle(11, .ghost, AyGrammSettings.hideOnlineKey, "Не отправлять «в сети»", state.value(AyGrammSettings.hideOnlineKey)))
-    entries.append(.toggle(12, .ghost, AyGrammSettings.hideReadKey, "Не отправлять прочтение", state.value(AyGrammSettings.hideReadKey)))
-    entries.append(.toggle(13, .ghost, AyGrammSettings.hideTypingKey, "Не отправлять «печатает…»", state.value(AyGrammSettings.hideTypingKey)))
-    entries.append(.toggle(14, .ghost, AyGrammSettings.hideStoryViewsKey, "Не отправлять просмотр историй", state.value(AyGrammSettings.hideStoryViewsKey)))
+    entries.append(.ghostAll(ayGrammGhostKeys.allSatisfy { state.value($0) }))
+    entries.append(.toggle(12, .ghost, AyGrammSettings.hideOnlineKey, "Не отправлять «в сети»", state.value(AyGrammSettings.hideOnlineKey)))
+    entries.append(.toggle(13, .ghost, AyGrammSettings.hideReadKey, "Не отправлять прочтение", state.value(AyGrammSettings.hideReadKey)))
+    entries.append(.toggle(14, .ghost, AyGrammSettings.hideTypingKey, "Не отправлять «печатает…»", state.value(AyGrammSettings.hideTypingKey)))
+    entries.append(.toggle(15, .ghost, AyGrammSettings.hideStoryViewsKey, "Не отправлять просмотр историй", state.value(AyGrammSettings.hideStoryViewsKey)))
     entries.append(.ghostFooter)
+    entries.append(.categoriesHeader)
+    entries.append(.category(21, "Автоответ", AyGrammAutoReply.statusTitle, "bubble.left.and.bubble.right.fill", AyGrammColor.green, [8]))
+    entries.append(.category(22, "Шрифты и сообщения", AyGrammFonts.selectedIndex == 0 ? "выкл." : AyGrammFonts.styles[AyGrammFonts.selectedIndex].name, "textformat", AyGrammColor.indigo, [4]))
+    entries.append(.category(23, "Голос", AyGrammVoice.selectedName, "waveform", AyGrammColor.pink, [6]))
+    entries.append(.category(24, "Отправка", "бомба, перевод, шифр", "paperplane.fill", AyGrammColor.orange, [9]))
+    entries.append(.category(25, "Профиль и украшения", "", "person.crop.circle.fill", AyGrammColor.purple, [3]))
+    entries.append(.category(26, "Чаты и инструменты", "", "wrench.and.screwdriver.fill", AyGrammColor.teal, [5, 7]))
+    entries.append(.category(27, "Связь и аккаунты", "", "phone.fill", AyGrammColor.green, [1, 2]))
+    entries.append(.category(28, "Все функции", "", "square.grid.2x2.fill", AyGrammColor.gray, []))
+    entries.append(.categoriesFooter)
     entries.append(.messagesHeader)
-    entries.append(.toggle(21, .messages, AyGrammSettings.saveDeletedKey, "Сохранять удалённые", state.value(AyGrammSettings.saveDeletedKey)))
-    entries.append(.toggle(22, .messages, AyGrammSettings.saveEditsKey, "Сохранять историю правок", state.value(AyGrammSettings.saveEditsKey)))
-    entries.append(.toggle(23, .messages, AyGrammSettings.silentSendKey, "Тихая отправка", state.value(AyGrammSettings.silentSendKey)))
+    entries.append(.toggle(31, .messages, AyGrammSettings.saveDeletedKey, "Сохранять удалённые", state.value(AyGrammSettings.saveDeletedKey)))
+    entries.append(.toggle(32, .messages, AyGrammSettings.saveEditsKey, "Сохранять историю правок", state.value(AyGrammSettings.saveEditsKey)))
+    entries.append(.toggle(33, .messages, AyGrammSettings.silentSendKey, "Тихая отправка", state.value(AyGrammSettings.silentSendKey)))
     entries.append(.deleted("\(deletedCount)"))
     entries.append(.messagesFooter)
     entries.append(.pluginsHeader)
-    entries.append(.toggle(31, .plugins, AyGrammSettings.pluginsEnabledKey, "Плагины включены", state.value(AyGrammSettings.pluginsEnabledKey)))
+    entries.append(.toggle(41, .plugins, AyGrammSettings.pluginsEnabledKey, "Плагины включены", state.value(AyGrammSettings.pluginsEnabledKey)))
     entries.append(.plugins)
-    entries.append(.decorations)
     entries.append(.pluginsFooter)
     entries.append(.communityHeader)
     entries.append(.channel)
@@ -255,6 +296,9 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
     }
     return entries
 }
+
+// Что нового: список функций последних сборок, открывается из шапки меню.
+private let ayGrammWhatsNewText = "• Автоответ: расписание, кому отвечать, умные ответы по словам, журнал.\n• Все 213 шрифтов пишут и русскими буквами, слово меняет шрифт сразу при наборе.\n• 21 эффект голоса, при выборе звучит образец.\n• Меню «Отправить»: бомба, перевод, шифровка, отправка голосом.\n• Меню сообщения → AyGramm: статистика чата, скриншот, кружок из галереи.\n• Профиль: дата регистрации и взаимный контакт.\n• Новое меню AyGramm и логотип вместо лампочки."
 
 func ayGrammSettingsController(context: AccountContext, openChannel: @escaping () -> Void) -> ViewController {
     let statePromise = ValuePromise(AyGrammSettingsState.current(), ignoreRepeated: true)
@@ -274,10 +318,31 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
         presentControllerImpl?(textAlertController(context: context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
     }
 
+    var refreshCounter = 0
+    let refreshMenu: () -> Void = {
+        refreshCounter += 1
+        statePromise.set(AyGrammSettingsState.current(refresh: refreshCounter))
+    }
+
     let arguments = AyGrammSettingsControllerArguments(
         toggle: { key, value in
             AyGrammSettings.setValue(key, value)
-            statePromise.set(AyGrammSettingsState.current())
+            refreshMenu()
+        },
+        toggleGhost: { value in
+            for key in ayGrammGhostKeys {
+                AyGrammSettings.setValue(key, value)
+            }
+            refreshMenu()
+        },
+        openWhatsNew: {
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            presentControllerImpl?(textAlertController(context: context, title: "Что нового в AyGramm", text: ayGrammWhatsNewText, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+        },
+        openCategory: { title, sections in
+            pushControllerImpl?(ayGrammBuiltinController(context: context, sections: sections.isEmpty ? nil : Set(sections), title: title, changed: {
+                refreshMenu()
+            }))
         },
         openDeleted: {
             pushControllerImpl?(ayGrammDeletedController(context: context, updatedCount: { count in
