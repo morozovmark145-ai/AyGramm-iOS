@@ -27,9 +27,11 @@ private final class AyGrammBuiltinArguments {
     let chooseBomb: () -> Void
     let chooseLanguage: () -> Void
     let setPassword: () -> Void
+    let openSnippets: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void, openFilters: @escaping () -> Void, openAutoReply: @escaping () -> Void, chooseBomb: @escaping () -> Void, chooseLanguage: @escaping () -> Void, setPassword: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void, openFilters: @escaping () -> Void, openAutoReply: @escaping () -> Void, chooseBomb: @escaping () -> Void, chooseLanguage: @escaping () -> Void, setPassword: @escaping () -> Void, openSnippets: @escaping () -> Void) {
         self.toggle = toggle
+        self.openSnippets = openSnippets
         self.openAutoReply = openAutoReply
         self.chooseBomb = chooseBomb
         self.chooseLanguage = chooseLanguage
@@ -63,6 +65,8 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case bombSeconds(String)
     case translateLanguage(String)
     case cipherPassword(Bool)
+    case stat(Int32, String, String, String, UInt32)
+    case snippets(Int)
     case footer
 
     var section: ItemListSectionId {
@@ -101,6 +105,10 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return 913
         case .cipherPassword:
             return 915
+        case let .stat(id, _, _, _, _):
+            return id
+        case .snippets:
+            return 417
         case .footer:
             return 1999
         }
@@ -171,6 +179,12 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("key.fill", AyGrammColor.yellow), title: "Пароль шифровки", label: isSet ? "задан" : "не задан", sectionId: self.section, style: .blocks, action: {
                 arguments.setPassword()
             })
+        case let .snippets(count):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("text.badge.plus", AyGrammColor.teal), title: "Сокращения", label: "\(count)", sectionId: self.section, style: .blocks, action: {
+                arguments.openSnippets()
+            })
+        case let .stat(_, title, label, symbol, color):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon(symbol, color), title: title, label: label, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case .footer:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Встроенные плагины работают внутри AyGramm и ничего не отправляют автору. Новый лимит аккаунтов действует при следующем добавлении аккаунта."), sectionId: self.section)
         }
@@ -304,6 +318,10 @@ func ayGrammBuiltinController(context: AccountContext, sections: Set<Int32>? = n
             refreshExtra()
         }))
         context.sharedContext.mainWindow?.presentNative(alert)
+    }, openSnippets: {
+        pushControllerImpl?(ayGrammSnippetsController(context: context, changed: {
+            refreshExtra()
+        }))
     })
 
     let signal = combineLatest(queue: .mainQueue(),
@@ -339,6 +357,7 @@ func ayGrammBuiltinController(context: AccountContext, sections: Set<Int32>? = n
         entries.append(.toggle(413, AyGrammSettings.fontLiveKey, "Шрифт при наборе", "Слово меняет шрифт сразу после пробела, ещё до отправки. Работает для начертаний без украшений и рамок.", value(AyGrammSettings.fontLiveKey)))
         entries.append(.toggle(415, AyGrammSettings.secondsKey, "Секунды во времени", "Время сообщений с секундами: 14:05:37.", value(AyGrammSettings.secondsKey)))
         entries.append(.toggle(416, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
+        entries.append(.snippets(AyGrammSnippets.all.count))
         entries.append(.sectionHeader(500, "ЧАТЫ"))
         entries.append(.toggle(510, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
         entries.append(.filters(AyGrammFilters.words.count + AyGrammFilters.authors.count))
@@ -353,6 +372,8 @@ func ayGrammBuiltinController(context: AccountContext, sections: Set<Int32>? = n
         entries.append(.crashLog(hasCrash))
         entries.append(.backupExport)
         entries.append(.backupRestore)
+        entries.append(.stat(715, "Сегодня в AyGramm", AyGrammScreenTime.todayTitle, "hourglass", AyGrammColor.teal))
+        entries.append(.stat(716, "За 7 дней", AyGrammScreenTime.weekTitle, "chart.bar.fill", AyGrammColor.blue))
         entries.append(.sectionHeader(800, "АВТООТВЕТ"))
         entries.append(.autoReply(AyGrammAutoReply.statusTitle))
         entries.append(.sectionHeader(900, "ОТПРАВКА"))
@@ -935,6 +956,7 @@ private enum AyGrammAutoReplyAction {
     static let excluded = 5
     static let addRule = 6
     static let clearLog = 7
+    static let templates = 8
 }
 
 // stableId / 100 = номер раздела.
@@ -1010,7 +1032,7 @@ func ayGrammAutoReplyController(context: AccountContext, changed: @escaping () -
     }, action: { kind in
         switch kind {
         case AyGrammAutoReplyAction.text:
-            let alert = UIAlertController(title: "Текст автоответа", message: "Подстановки: {имя}, {время}, {дата}. Пустой текст вернёт стандартный.", preferredStyle: .alert)
+            let alert = UIAlertController(title: "Текст автоответа", message: "Подстановки: {имя}, {время}, {дата}, {до} (конец расписания, например 08:00). Пустой текст вернёт стандартный.", preferredStyle: .alert)
             alert.addTextField(configurationHandler: { field in
                 field.text = AyGrammAutoReply.text
                 field.clearButtonMode = .whileEditing
@@ -1093,6 +1115,12 @@ func ayGrammAutoReplyController(context: AccountContext, changed: @escaping () -
         case AyGrammAutoReplyAction.clearLog:
             AyGrammAutoReply.clearLog()
             refresh()
+        case AyGrammAutoReplyAction.templates:
+            let templates = AyGrammAutoReply.templates
+            pushControllerImpl?(ayGrammOptionsController(context: context, title: "Шаблоны", header: "ГОТОВЫЙ ТЕКСТ", options: templates.map { $0.0 }, selected: templates.firstIndex(where: { $0.1 == AyGrammAutoReply.text }) ?? -1, footer: "Шаблон заменяет текст ответа. Потом его можно поправить в «Текст ответа».", select: { index in
+                AyGrammAutoReply.text = templates[index].1
+                refresh()
+            }))
         default:
             break
         }
@@ -1118,7 +1146,8 @@ func ayGrammAutoReplyController(context: AccountContext, changed: @escaping () -
         entries.append(.header(0, "АВТООТВЕТ"))
         entries.append(.toggle(1, AyGrammSettings.autoReplyKey, "Автоответ", "Отвечает людям в личных чатах, пока вас нет. Сейчас: \(AyGrammAutoReply.statusTitle).", value(AyGrammSettings.autoReplyKey)))
         entries.append(.action(2, "Текст ответа", String(AyGrammAutoReply.text.prefix(24)), "text.quote", AyGrammColor.blue, AyGrammAutoReplyAction.text))
-        entries.append(.toggle(3, AyGrammSettings.autoReplyMarkKey, "Метка 🤖", "Собеседник видит, что ответ автоматический. На сообщения с 🤖 автоответ не отвечает, поэтому два автоответа не спорят друг с другом.", value(AyGrammSettings.autoReplyMarkKey)))
+        entries.append(.action(3, "Шаблоны", "\(AyGrammAutoReply.templates.count) готовых", "square.stack.fill", AyGrammColor.orange, AyGrammAutoReplyAction.templates))
+        entries.append(.toggle(4, AyGrammSettings.autoReplyMarkKey, "Метка 🤖", "Собеседник видит, что ответ автоматический. На сообщения с 🤖 автоответ не отвечает, поэтому два автоответа не спорят друг с другом.", value(AyGrammSettings.autoReplyMarkKey)))
         entries.append(.header(100, "КОГДА"))
         entries.append(.toggle(101, AyGrammSettings.autoReplyBackgroundKey, "Только когда AyGramm свёрнут", "Пока приложение открыто, автоответ молчит.", value(AyGrammSettings.autoReplyBackgroundKey)))
         entries.append(.toggle(102, AyGrammSettings.autoReplyScheduleKey, "По расписанию", "Автоответ работает только в выбранные часы.", value(AyGrammSettings.autoReplyScheduleKey)))
@@ -1155,4 +1184,112 @@ func ayGrammAutoReplyController(context: AccountContext, changed: @escaping () -
         controller?.push(c)
     }
     return controller
+}
+
+// MARK: - Сокращения
+
+private final class AyGrammSnippetArguments {
+    let add: () -> Void
+    let remove: (String) -> Void
+
+    init(add: @escaping () -> Void, remove: @escaping (String) -> Void) {
+        self.add = add
+        self.remove = remove
+    }
+}
+
+private enum AyGrammSnippetEntry: ItemListNodeEntry {
+    case snippet(Int32, String, String)
+    case add
+    case info(String)
+
+    var section: ItemListSectionId {
+        return 0
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case let .snippet(id, _, _):
+            return id
+        case .add:
+            return 1000
+        case .info:
+            return 1001
+        }
+    }
+
+    static func <(lhs: AyGrammSnippetEntry, rhs: AyGrammSnippetEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let arguments = arguments as! AyGrammSnippetArguments
+        switch self {
+        case let .snippet(_, key, text):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("text.badge.plus", AyGrammColor.teal), title: key, label: text, sectionId: self.section, style: .blocks, action: {
+                arguments.remove(key)
+            })
+        case .add:
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("plus", AyGrammColor.green), title: "Добавить сокращение", label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.add()
+            })
+        case let .info(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        }
+    }
+}
+
+private func ayGrammSnippetsController(context: AccountContext, changed: @escaping () -> Void) -> ViewController {
+    let versionPromise = ValuePromise<Int>(0, ignoreRepeated: false)
+    var version = 0
+    let refresh: () -> Void = {
+        version += 1
+        versionPromise.set(version)
+        changed()
+    }
+    let arguments = AyGrammSnippetArguments(add: {
+        let alert = UIAlertController(title: "Сокращение", message: "Слово с ; в сообщении при отправке заменится текстом. Пример: ;адрес станет «ул. Ленина, 5».", preferredStyle: .alert)
+        alert.addTextField(configurationHandler: { field in
+            field.placeholder = "Слово, например адрес"
+            field.autocapitalizationType = .none
+            field.autocorrectionType = .no
+        })
+        alert.addTextField(configurationHandler: { field in
+            field.placeholder = "Текст"
+        })
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: "Добавить", style: .default, handler: { [weak alert] _ in
+            let fields = alert?.textFields ?? []
+            if fields.count == 2 {
+                AyGrammSnippets.set(fields[0].text ?? "", fields[1].text ?? "")
+            }
+            refresh()
+        }))
+        context.sharedContext.mainWindow?.presentNative(alert)
+    }, remove: { key in
+        let alert = UIAlertController(title: "Удалить \(key)?", message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: "Удалить", style: .destructive, handler: { _ in
+            AyGrammSnippets.remove(key)
+            refresh()
+        }))
+        context.sharedContext.mainWindow?.presentNative(alert)
+    })
+
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        versionPromise.get()
+    )
+    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        var entries: [AyGrammSnippetEntry] = []
+        for (index, item) in AyGrammSnippets.all.prefix(900).enumerated() {
+            entries.append(.snippet(Int32(index), item.0, item.1))
+        }
+        entries.append(.add)
+        entries.append(.info("Сокращение начинается с ; и стоит отдельным словом. Текст может содержать {дата} и {время}. Нажмите на сокращение, чтобы удалить его. Сообщения с форматированием не меняются."))
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Сокращения"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, arguments))
+    }
+    return ItemListController(context: context, state: signal)
 }
