@@ -25,6 +25,7 @@ public enum AyGrammSettings {
     public static let filtersKey = "AyGrammFiltersEnabled"
     public static let exportKey = "AyGrammExportEnabled"
     public static let fontButtonKey = "AyGrammFontButton"
+    public static let fontLiveKey = "AyGrammFontLive"
     public static let accountAgeKey = "AyGrammAccountAge"
     public static let mutualKey = "AyGrammMutual"
     public static let chatToolsKey = "AyGrammChatTools"
@@ -119,7 +120,7 @@ public enum AyGrammSettings {
     // MARK: - Профили настроек «Работа» и «Дом»
 
     // Все переключатели AyGramm, которые сохраняет профиль.
-    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey, filtersKey, exportKey, fontButtonKey, accountAgeKey, mutualKey, chatToolsKey, bombKey, translateKey, cipherKey, voiceSendKey, autoReplyKey, autoReplyMarkKey, autoReplyBackgroundKey, autoReplyScheduleKey]
+    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey, filtersKey, exportKey, fontButtonKey, fontLiveKey, accountAgeKey, mutualKey, chatToolsKey, bombKey, translateKey, cipherKey, voiceSendKey, autoReplyKey, autoReplyMarkKey, autoReplyBackgroundKey, autoReplyScheduleKey]
 
     // «14:05» → «14:05:37», «2:05 PM» → «2:05:37 PM». Секунды встают после первого времени в строке.
     public static func addSeconds(_ text: String, timestamp: Int32) -> String {
