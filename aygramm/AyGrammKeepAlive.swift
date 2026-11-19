@@ -25,6 +25,7 @@ final class AyGrammKeepAlive {
     // Вызывается при сворачивании и разворачивании AyGramm и когда Telegram сам включает или выключает звук.
     func update(inForeground: Bool, hasOtherAudio: Bool) {
         self.inForeground = inForeground
+        AyGrammAutoReply.isAppActive = inForeground
         self.hasOtherAudio = hasOtherAudio
         if !inForeground && !hasOtherAudio && AyGrammSettings.keepAlive && !AyGrammKeepAlive.isBatteryLow() {
             self.start()
