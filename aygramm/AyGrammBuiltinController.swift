@@ -185,7 +185,9 @@ private func ayGrammBuiltinValues() -> [String: Bool] {
     return values
 }
 
-func ayGrammBuiltinController(context: AccountContext) -> ViewController {
+// sections: номера разделов (stableId / 100) для экрана одной категории из меню AyGramm, nil показывает все.
+// changed сообщает меню AyGramm, что подписи категорий надо обновить.
+func ayGrammBuiltinController(context: AccountContext, sections: Set<Int32>? = nil, title: String = "Встроенные плагины", changed: (() -> Void)? = nil) -> ViewController {
     let valuesPromise = ValuePromise<[String: Bool]>(ayGrammBuiltinValues(), ignoreRepeated: true)
     let logCountPromise = ValuePromise<Int>(AyGrammPluginLog.entries().count, ignoreRepeated: true)
     let fontPromise = ValuePromise<Int>(AyGrammFonts.selectedIndex, ignoreRepeated: true)
@@ -208,6 +210,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     let arguments = AyGrammBuiltinArguments(toggle: { key, value in
         AyGrammSettings.setValue(key, value)
         valuesPromise.set(ayGrammBuiltinValues())
+        changed?()
     }, openDecorations: {
         pushControllerImpl?(ayGrammDecorationsController(context: context))
     }, openProfiles: {
@@ -221,10 +224,12 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     }, openFonts: {
         pushControllerImpl?(ayGrammFontsController(context: context, selected: { index in
             fontPromise.set(index)
+            changed?()
         }))
     }, openVoice: {
         pushControllerImpl?(ayGrammVoiceController(context: context, selected: { index in
             voicePromise.set(index)
+            changed?()
         }))
     }, openCrashLog: {
         guard let report = AyGrammCrashLog.lastReport else {
@@ -262,6 +267,7 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         pushControllerImpl?(ayGrammAutoReplyController(context: context, changed: {
             valuesPromise.set(ayGrammBuiltinValues())
             refreshExtra()
+            changed?()
         }))
     }, chooseBomb: {
         let options = AyGrammBomb.options
@@ -330,8 +336,9 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.toggle(410, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} заменяются при отправке.", value(AyGrammSettings.tokensKey)))
         entries.append(.font(AyGrammFonts.styles[fontIndex].name))
         entries.append(.toggle(412, AyGrammSettings.fontButtonKey, "Кнопка шрифта", "Долгое нажатие на «Отправить»: включить или выключить шрифт сообщений.", value(AyGrammSettings.fontButtonKey)))
-        entries.append(.toggle(413, AyGrammSettings.secondsKey, "Секунды во времени", "Время сообщений с секундами: 14:05:37.", value(AyGrammSettings.secondsKey)))
-        entries.append(.toggle(414, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
+        entries.append(.toggle(413, AyGrammSettings.fontLiveKey, "Шрифт при наборе", "Слово меняет шрифт сразу после пробела, ещё до отправки. Работает для начертаний без украшений и рамок.", value(AyGrammSettings.fontLiveKey)))
+        entries.append(.toggle(415, AyGrammSettings.secondsKey, "Секунды во времени", "Время сообщений с секундами: 14:05:37.", value(AyGrammSettings.secondsKey)))
+        entries.append(.toggle(416, AyGrammSettings.readAloudKey, "Прочитать вслух", "Пункт в меню сообщения: голос iOS читает текст.", value(AyGrammSettings.readAloudKey)))
         entries.append(.sectionHeader(500, "ЧАТЫ"))
         entries.append(.toggle(510, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
         entries.append(.filters(AyGrammFilters.words.count + AyGrammFilters.authors.count))
@@ -355,8 +362,12 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.translateLanguage(AyGrammTranslate.languageName))
         entries.append(.toggle(914, AyGrammSettings.cipherKey, "Шифровка", "Долгое нажатие на «Отправить»: текст уходит зашифрованным, прочитает только AyGramm с тем же паролем.", value(AyGrammSettings.cipherKey)))
         entries.append(.cipherPassword(!AyGrammCipher.password.isEmpty))
-        entries.append(.footer)
-        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Встроенные плагины"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        if let sections = sections {
+            entries = entries.filter { sections.contains($0.stableId / 100) }
+        } else {
+            entries.append(.footer)
+        }
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
@@ -665,7 +676,7 @@ private enum AyGrammVoiceEntry: ItemListNodeEntry {
                 select(Int(index))
             })
         case .footer:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Голос меняется при записи голосового сообщения. Собеседник слышит уже изменённый голос, прослушивание перед отправкой звучит так же. Видеосообщения в кружках не меняются."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Нажмите на эффект: AyGramm прочитает фразу-образец с ним. Голос меняется при записи голосового сообщения и в «Отправить голосом». Собеседник слышит уже изменённый голос. Видеосообщения в кружках не меняются."), sectionId: self.section)
         }
     }
 }
@@ -676,6 +687,7 @@ private func ayGrammVoiceController(context: AccountContext, selected: @escaping
         AyGrammVoice.selectedIndex = index
         selectedPromise.set(index)
         selected(index)
+        AyGrammVoice.previewPlayer?(index)
     }
 
     let signal = combineLatest(queue: .mainQueue(),
