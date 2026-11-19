@@ -388,7 +388,8 @@ func ayGrammTransformOutgoing(_ messages: [EnqueueMessage], peerId: PeerId? = ni
     let silent = AyGrammSettings.silentSend
     let useTokens = AyGrammSettings.value(AyGrammSettings.tokensKey)
     let fontStyle = AyGrammFonts.selected
-    if !usePlugins && !silent && !useTokens && fontStyle == nil {
+    let useSnippets = !AyGrammSnippets.isEmpty
+    if !usePlugins && !silent && !useTokens && fontStyle == nil && !useSnippets {
         return messages
     }
     return messages.map { message -> EnqueueMessage in
@@ -410,7 +411,11 @@ func ayGrammTransformOutgoing(_ messages: [EnqueueMessage], peerId: PeerId? = ni
                     hasNotificationInfo = true
                 }
             }
-            if useTokens && !hasEntities && text.contains("{") {
+            // Сокращения «;слово» раньше подстановок, чтобы текст сокращения мог содержать {дата}.
+            if useSnippets && !hasEntities && text.contains(";") {
+                updatedText = AyGrammSnippets.expand(updatedText)
+            }
+            if useTokens && !hasEntities && updatedText.contains("{") {
                 updatedText = ayGrammReplaceTokens(updatedText)
             }
             if usePlugins && !text.isEmpty && !hasEntities {
