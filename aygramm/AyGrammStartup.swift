@@ -10,6 +10,10 @@ import AccountContext
 // 3. подсказка о новом плагине из каталога.
 func ayGrammAccountReady(context: AccountContext, presentAlert: @escaping (UIAlertController) -> Void) {
     AyGrammCrashLog.install()
+    // Автоответ слушает новые сообщения аккаунта, бомбы срабатывают после перезапуска, озвучка подключается к меню «Отправить».
+    AyGrammAutoReply.attach(account: context.account)
+    AyGrammBomb.resume(account: context.account)
+    ayGrammInstallActions()
     let engine = context.engine
     let _ = (AyGrammCommunity.refreshBanState(engine: engine, accountPeerId: context.account.peerId)
     |> deliverOnMainQueue).start(next: { banned in
