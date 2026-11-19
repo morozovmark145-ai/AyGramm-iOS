@@ -35,6 +35,17 @@ public enum AyGrammAutoReply {
     static let countKey = "AyGrammAutoReplyCount"
 
     public static let defaultText = "Привет, {имя}! Сейчас не могу ответить, напишу, как освобожусь."
+    // Готовые тексты: название в меню и текст ответа. {до} подставляет конец расписания, например 08:00.
+    public static let templates: [(String, String)] = [
+        ("Сплю", "Привет, {имя}! Я сплю 😴 Отвечу утром, после {до}."),
+        ("На работе", "Привет, {имя}! Я на работе, отвечу, как освобожусь."),
+        ("За рулём", "{имя}, я за рулём 🚗 Напишу, как приеду."),
+        ("В отпуске", "Привет, {имя}! Я в отпуске 🌴 Отвечу, когда вернусь."),
+        ("На учёбе", "Привет, {имя}! Я на учёбе 📚 Напишу после занятий."),
+        ("На тренировке", "{имя}, я на тренировке 💪 Отвечу через час."),
+        ("Занят до вечера", "Привет, {имя}! Сегодня занят, отвечу после {до}."),
+        ("Стандартный", "Привет, {имя}! Сейчас не могу ответить, напишу, как освобожусь."),
+    ]
     public static let audiences: [String] = ["Всем", "Только контактам", "Только незнакомым"]
     public static let cooldowns: [(Int, String)] = [(15, "раз в 15 минут"), (60, "раз в час"), (180, "раз в 3 часа"), (360, "раз в 6 часов"), (1440, "раз в день")]
     public static let delays: [(Int, String)] = [(0, "сразу"), (10, "через 10 секунд"), (30, "через 30 секунд"), (60, "через минуту"), (300, "через 5 минут")]
@@ -322,7 +333,8 @@ public enum AyGrammAutoReply {
         let day = DateFormatter()
         day.dateFormat = "dd.MM"
         let now = Date()
-        return template.replacingOccurrences(of: "{имя}", with: name).replacingOccurrences(of: "{время}", with: time.string(from: now)).replacingOccurrences(of: "{дата}", with: day.string(from: now))
+        let until = String(format: "%02d:00", toHour)
+        return template.replacingOccurrences(of: "{имя}", with: name).replacingOccurrences(of: "{время}", with: time.string(from: now)).replacingOccurrences(of: "{дата}", with: day.string(from: now)).replacingOccurrences(of: "{до}", with: until)
     }
 
     static func send(account: Account, message: Message, name: String, template: String, checkRead: Bool) {
