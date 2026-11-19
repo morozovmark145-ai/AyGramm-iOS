@@ -25,9 +25,20 @@ public enum AyGrammSettings {
     public static let filtersKey = "AyGrammFiltersEnabled"
     public static let exportKey = "AyGrammExportEnabled"
     public static let fontButtonKey = "AyGrammFontButton"
+    public static let accountAgeKey = "AyGrammAccountAge"
+    public static let mutualKey = "AyGrammMutual"
+    public static let chatToolsKey = "AyGrammChatTools"
+    public static let bombKey = "AyGrammBomb"
+    public static let translateKey = "AyGrammTranslate"
+    public static let cipherKey = "AyGrammCipher"
+    public static let voiceSendKey = "AyGrammVoiceSend"
+    public static let autoReplyKey = "AyGrammAutoReply"
+    public static let autoReplyMarkKey = "AyGrammAutoReplyMark"
+    public static let autoReplyBackgroundKey = "AyGrammAutoReplyBackground"
+    public static let autoReplyScheduleKey = "AyGrammAutoReplySchedule"
     static let bannedKey = "AyGrammBanned"
     // Переключатели, которые по умолчанию выключены.
-    static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey, streamerKey]
+    static let defaultOffKeys: Set<String> = [silentSendKey, keepAliveKey, streamerKey, autoReplyKey, autoReplyBackgroundKey, autoReplyScheduleKey]
 
     // Действующее значение: при бане всегда выключено.
     public static func value(_ key: String) -> Bool {
@@ -108,7 +119,7 @@ public enum AyGrammSettings {
     // MARK: - Профили настроек «Работа» и «Дом»
 
     // Все переключатели AyGramm, которые сохраняет профиль.
-    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey, filtersKey, exportKey, fontButtonKey]
+    public static let profileKeys: [String] = [hideOnlineKey, hideReadKey, hideTypingKey, hideStoryViewsKey, saveDeletedKey, saveEditsKey, pluginsEnabledKey, silentSendKey, keepAliveKey, keepAliveBatteryKey, unlimitedAccountsKey, decorationsKey, tokensKey, readAloudKey, secondsKey, showIdKey, streamerKey, filtersKey, exportKey, fontButtonKey, accountAgeKey, mutualKey, chatToolsKey, bombKey, translateKey, cipherKey, voiceSendKey, autoReplyKey, autoReplyMarkKey, autoReplyBackgroundKey, autoReplyScheduleKey]
 
     // «14:05» → «14:05:37», «2:05 PM» → «2:05:37 PM». Секунды встают после первого времени в строке.
     public static func addSeconds(_ text: String, timestamp: Int32) -> String {
