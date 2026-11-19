@@ -85,6 +85,28 @@ func ayGrammKeyIcon(_ key: String) -> UIImage? {
         return ayGrammIcon("tray.and.arrow.down.fill", AyGrammColor.teal)
     case AyGrammSettings.fontButtonKey:
         return ayGrammIcon("hand.tap.fill", AyGrammColor.indigo)
+    case AyGrammSettings.accountAgeKey:
+        return ayGrammIcon("calendar", AyGrammColor.orange)
+    case AyGrammSettings.mutualKey:
+        return ayGrammIcon("arrow.left.arrow.right", AyGrammColor.green)
+    case AyGrammSettings.chatToolsKey:
+        return ayGrammIcon("sparkles", AyGrammColor.purple)
+    case AyGrammSettings.bombKey:
+        return ayGrammIcon("flame.fill", AyGrammColor.red)
+    case AyGrammSettings.translateKey:
+        return ayGrammIcon("globe", AyGrammColor.blue)
+    case AyGrammSettings.cipherKey:
+        return ayGrammIcon("lock.fill", AyGrammColor.indigo)
+    case AyGrammSettings.voiceSendKey:
+        return ayGrammIcon("waveform", AyGrammColor.pink)
+    case AyGrammSettings.autoReplyKey:
+        return ayGrammIcon("bubble.left.and.bubble.right.fill", AyGrammColor.green)
+    case AyGrammSettings.autoReplyMarkKey:
+        return ayGrammIcon("tag.fill", AyGrammColor.orange)
+    case AyGrammSettings.autoReplyBackgroundKey:
+        return ayGrammIcon("moon.fill", AyGrammColor.indigo)
+    case AyGrammSettings.autoReplyScheduleKey:
+        return ayGrammIcon("calendar.badge.clock", AyGrammColor.teal)
     default:
         return ayGrammIcon("gearshape", AyGrammColor.gray)
     }
