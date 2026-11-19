@@ -215,7 +215,7 @@ replace(f"{CORE}/State/StoredMessageConfirmation.swift",
 ITEMS = f"{PEER}/PeerInfoSettingsItems.swift"
 replace(ITEMS,
         "    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages,",
-        "    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 100, text: \"AyGramm\", icon: PresentationResourcesSettings.tips, action: {\n"
+        "    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 100, text: \"AyGramm\", icon: ayGrammLogoIcon(), action: {\n"
         "        interaction.openSettings(.tips)\n"
         "    }))\n"
         "    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages,")
@@ -480,5 +480,26 @@ replace("submodules/TelegramUI/Components/Chat/ChatMessageTextBubbleContentNode/
         "                        messageEntities = nil\n"
         "                    }\n"
         "                    let translateToLanguage = item.associatedData.translateToLanguage\n")
+
+# Шрифт при наборе: после каждого изменения текста готовые слова получают выбранный шрифт.
+# Сложное содержимое нового редактора (таблицы, медиа в тексте) не трогается.
+INPUT = "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift"
+replace(INPUT,
+        "            self.interfaceInteraction?.updateTextInputStateAndMode({ _, inputMode in return (inputTextState, inputMode) })\n"
+        "            self.interfaceInteraction?.updateInputLanguage({ _ in return self.richTextInputNode?.primaryLanguage })\n",
+        "            let ayGrammLiveState = ayGrammLiveFontState(inputTextState)\n"
+        "            self.interfaceInteraction?.updateTextInputStateAndMode({ _, inputMode in return (ayGrammLiveState, inputMode) })\n"
+        "            self.interfaceInteraction?.updateInputLanguage({ _ in return self.richTextInputNode?.primaryLanguage })\n")
+with open(ROOT / INPUT, "a", encoding="utf-8") as f:
+    f.write("\n// AyGramm: шрифт при наборе.\n"
+            "private func ayGrammLiveFontState(_ state: ChatTextInputState) -> ChatTextInputState {\n"
+            "    if ChatTextInputState(inputText: state.inputText, selectionRange: state.selectionRange) != state {\n"
+            "        return state\n"
+            "    }\n"
+            "    guard let ayGrammResult = AyGrammFonts.liveTransform(state.inputText, selection: state.selectionRange) else {\n"
+            "        return state\n"
+            "    }\n"
+            "    return ChatTextInputState(inputText: ayGrammResult.0, selectionRange: ayGrammResult.1)\n"
+            "}\n")
 
 print("AyGramm: все правки применены")
