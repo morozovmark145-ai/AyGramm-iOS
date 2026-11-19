@@ -25,11 +25,18 @@ func ayGrammAccountReady(context: AccountContext, presentAlert: @escaping (UIAle
         }
         if !UserDefaults.standard.bool(forKey: "AyGrammConsentShown") {
             UserDefaults.standard.set(true, forKey: "AyGrammConsentShown")
+            AyGrammWhatsNew.markSeen()
             let alert = UIAlertController(title: "Добро пожаловать в AyGramm", message: AyGrammCommunity.consentText, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "Подписаться", style: .default, handler: { _ in
                 let _ = AyGrammCommunity.join(engine: engine).start()
             }))
             alert.addAction(UIAlertAction(title: "Не сейчас", style: .cancel, handler: nil))
+            presentAlert(alert)
+            return
+        }
+        if AyGrammWhatsNew.shouldShow() {
+            let alert = UIAlertController(title: "Что нового в AyGramm 0.\(AyGrammSettings.currentVersion)", message: AyGrammWhatsNew.text, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
             presentAlert(alert)
             return
         }
