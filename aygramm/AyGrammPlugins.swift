@@ -378,7 +378,12 @@ func ayGrammReplaceTokens(_ text: String) -> String {
 // 1. текст без форматирования проходит через плагины (с форматированием не меняется: новый текст
 //    сдвинул бы диапазоны жирного шрифта и ссылок);
 // 2. при «Тихой отправке» сообщение получает флаг «без звука».
-func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] {
+func ayGrammTransformOutgoing(_ messages: [EnqueueMessage], peerId: PeerId? = nil) -> [EnqueueMessage] {
+    // Режим из меню «Отправить» сначала получает исходный текст: перевод, шифровка и голос
+    // работают с ним, шрифт и плагины применятся при повторной отправке уже готового текста.
+    if let peerId = peerId, AyGrammOutgoing.isArmed(peerId: peerId) {
+        return messages
+    }
     let usePlugins = AyGrammSettings.pluginsEnabled && !AyGrammPlugins.installedIds.isEmpty
     let silent = AyGrammSettings.silentSend
     let useTokens = AyGrammSettings.value(AyGrammSettings.tokensKey)
@@ -389,6 +394,10 @@ func ayGrammTransformOutgoing(_ messages: [EnqueueMessage]) -> [EnqueueMessage] 
     return messages.map { message -> EnqueueMessage in
         switch message {
         case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
+            // Шифровку нельзя менять: шрифт или плагин испортят шифр.
+            if AyGrammCipher.isCipherText(text) {
+                return message
+            }
             var updatedText = text
             var updatedAttributes = attributes
             var hasEntities = false
