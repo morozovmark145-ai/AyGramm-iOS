@@ -26,6 +26,7 @@ final class AyGrammKeepAlive {
     func update(inForeground: Bool, hasOtherAudio: Bool) {
         self.inForeground = inForeground
         AyGrammAutoReply.isAppActive = inForeground
+        AyGrammScreenTime.setActive(inForeground)
         self.hasOtherAudio = hasOtherAudio
         if !inForeground && !hasOtherAudio && AyGrammSettings.keepAlive && !AyGrammKeepAlive.isBatteryLow() {
             self.start()
