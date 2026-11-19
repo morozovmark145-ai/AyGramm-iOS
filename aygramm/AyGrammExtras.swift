@@ -739,3 +739,267 @@ public enum AyGrammShot {
         }
     }
 }
+
+// MARK: - Что нового
+
+// Список для шапки меню AyGramm и для окна после обновления.
+public enum AyGrammWhatsNew {
+    public static let text = "• Автоответ: расписание, кому отвечать, шаблоны, умные ответы по словам, журнал.\n• Все 213 шрифтов пишут и русскими буквами, слово меняет шрифт сразу при наборе.\n• 21 эффект голоса, при выборе звучит образец.\n• Меню «Отправить»: бомба, перевод, шифровка, отправка голосом.\n• Меню сообщения → AyGramm: статистика, скриншот, кружок, «Напомнить», заметка о человеке, голосовое файлом.\n• Профиль: дата регистрации, взаимный контакт, ваша заметка.\n• Сокращения: ;адрес превращается в ваш текст.\n• Призрак: «Призрак целиком» и обычный режим для выбранных чатов.\n• Экранное время и новое меню AyGramm с логотипом."
+    static let seenKey = "AyGrammLastSeenVersion"
+
+    // true один раз после обновления на новую сборку. Первый запуск только запоминает версию.
+    public static func shouldShow() -> Bool {
+        let current = AyGrammSettings.currentVersion
+        let seen = UserDefaults.standard.integer(forKey: seenKey)
+        UserDefaults.standard.set(current, forKey: seenKey)
+        return seen < current && UserDefaults.standard.bool(forKey: "AyGrammConsentShown")
+    }
+
+    public static func markSeen() {
+        UserDefaults.standard.set(AyGrammSettings.currentVersion, forKey: seenKey)
+    }
+}
+
+// MARK: - Экранное время
+
+// Сколько времени AyGramm открыт на экране и сколько раз отправлялись сообщения, по дням.
+// Хранится на телефоне за последние 14 дней.
+public enum AyGrammScreenTime {
+    static let secondsKey = "AyGrammScreenSeconds"
+    static let sentKey = "AyGrammScreenSent"
+    static var activeSince: Double?
+
+    static func dayKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    static func add(_ key: String, _ value: Double, at date: Date) {
+        var table = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+        let day = dayKey(date)
+        table[day] = (table[day] ?? 0.0) + value
+        if table.count > 14 {
+            for old in table.keys.sorted().prefix(table.count - 14) {
+                table.removeValue(forKey: old)
+            }
+        }
+        UserDefaults.standard.set(table, forKey: key)
+    }
+
+    // Вызывается при сворачивании и разворачивании AyGramm.
+    public static func setActive(_ active: Bool) {
+        let now = Date().timeIntervalSince1970
+        if active {
+            if activeSince == nil {
+                activeSince = now
+            }
+        } else if let since = activeSince {
+            activeSince = nil
+            add(secondsKey, max(0.0, now - since), at: Date(timeIntervalSince1970: since))
+        }
+    }
+
+    public static func countSent() {
+        add(sentKey, 1.0, at: Date())
+    }
+
+    // Сумма за последние days дней, включая сегодня и открытый сейчас сеанс.
+    static func total(_ key: String, days: Int) -> Double {
+        let table = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+        var sum = 0.0
+        for back in 0 ..< days {
+            if let date = Calendar.current.date(byAdding: .day, value: -back, to: Date()) {
+                sum += table[dayKey(date)] ?? 0.0
+            }
+        }
+        if key == secondsKey, let since = activeSince {
+            sum += max(0.0, Date().timeIntervalSince1970 - since)
+        }
+        return sum
+    }
+
+    static func duration(_ seconds: Double) -> String {
+        let minutes = Int(seconds / 60.0)
+        if minutes < 60 {
+            return "\(minutes) мин"
+        }
+        return "\(minutes / 60) ч \(minutes % 60) мин"
+    }
+
+    public static var todayTitle: String {
+        return duration(total(secondsKey, days: 1)) + " · отправок \(Int(total(sentKey, days: 1)))"
+    }
+
+    public static var weekTitle: String {
+        return duration(total(secondsKey, days: 7)) + " · отправок \(Int(total(sentKey, days: 7)))"
+    }
+}
+
+// MARK: - Заметки о людях
+
+// Своя заметка о человеке или чате. Видна только на этом телефоне, в профиле и в меню AyGramm.
+public enum AyGrammNotes {
+    static let key = "AyGrammNotes"
+
+    public static func note(_ peerId: PeerId) -> String? {
+        let table = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+        return table["\(peerId.toInt64())"]
+    }
+
+    public static func setNote(_ peerId: PeerId, _ text: String) {
+        var table = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            table.removeValue(forKey: "\(peerId.toInt64())")
+        } else {
+            table["\(peerId.toInt64())"] = String(trimmed.prefix(500))
+        }
+        UserDefaults.standard.set(table, forKey: key)
+    }
+}
+
+// MARK: - Напомнить о сообщении
+
+// Отложенное сообщение самому себе в «Избранное»: в назначенное время Telegram пришлёт уведомление,
+// даже если AyGramm закрыт. Шрифты и плагины к напоминанию не применяются.
+public enum AyGrammRemind {
+    public static func text(message: EngineMessage, peer: EnginePeer?) -> String {
+        var body = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty {
+            body = "медиа без подписи"
+        }
+        if body.count > 300 {
+            body = String(body.prefix(300)) + "…"
+        }
+        var result = "🔔 Напоминание\n«\(body)»"
+        if case let .channel(channel)? = peer {
+            if let username = channel.addressName, !username.isEmpty {
+                result += "\nhttps://t.me/\(username)/\(message.id.id)"
+            } else {
+                result += "\nhttps://t.me/c/\(message.id.peerId.id._internalGetInt64Value())/\(message.id.id)"
+            }
+        } else if let peer = peer {
+            result += "\nЧат: \(peer.debugDisplayTitle)"
+        }
+        return result
+    }
+
+    public static func schedule(account: Account, text: String, at time: Int32) -> Signal<Bool, NoError> {
+        return account.postbox.transaction { transaction -> Bool in
+            let ids = enqueueMessages(transaction: transaction, account: account, peerId: account.peerId, messages: [(false, .message(text: text, attributes: [OutgoingScheduleInfoMessageAttribute(scheduleTime: time, repeatPeriod: nil)], inlineStickers: [:], mediaReference: nil, threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))])
+            return ids.contains(where: { $0 != nil })
+        }
+    }
+}
+
+// MARK: - Голосовое файлом
+
+public enum AyGrammFiles {
+    // Путь к скачанному файлу сообщения или nil, если файл ещё не скачан.
+    public static func completedPath(account: Account, file: TelegramMediaFile) -> String? {
+        return account.postbox.mediaBox.completedResourcePath(file.resource)
+    }
+}
+
+// MARK: - Сокращения
+
+// Свои сокращения: «;адрес» отдельным словом при отправке заменяется сохранённым текстом.
+public enum AyGrammSnippets {
+    static let key = "AyGrammSnippets"
+
+    static var table: [String: String] {
+        get {
+            return UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: key)
+        }
+    }
+
+    public static var isEmpty: Bool {
+        return table.isEmpty
+    }
+
+    // Сокращения по алфавиту: «;слово» и текст.
+    public static var all: [(String, String)] {
+        let current = table
+        return current.keys.sorted().map { (";" + $0, current[$0] ?? "") }
+    }
+
+    static func clean(_ word: String) -> String {
+        var name = word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while name.hasPrefix(";") {
+            name.removeFirst()
+        }
+        return name
+    }
+
+    public static func set(_ word: String, _ text: String) {
+        let name = clean(word)
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty || value.isEmpty || name.contains(" ") {
+            return
+        }
+        var current = table
+        current[name] = value
+        table = current
+    }
+
+    public static func remove(_ word: String) {
+        var current = table
+        current.removeValue(forKey: clean(word))
+        table = current
+    }
+
+    public static func expand(_ text: String) -> String {
+        let current = table
+        if current.isEmpty || !text.contains(";") {
+            return text
+        }
+        var lines: [String] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            var words: [String] = []
+            for word in line.split(separator: " ", omittingEmptySubsequences: false) {
+                if word.hasPrefix(";"), let value = current[String(word.dropFirst()).lowercased()] {
+                    words.append(value)
+                } else {
+                    words.append(String(word))
+                }
+            }
+            lines.append(words.joined(separator: " "))
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Исключения режима призрака
+
+// Чаты, где прочтение и «печатает…» отправляются как обычно, даже когда режим призрака включён.
+public enum AyGrammGhost {
+    static let key = "AyGrammGhostExceptions"
+
+    public static var exceptions: Set<Int64> {
+        get {
+            let stored = UserDefaults.standard.array(forKey: key) as? [NSNumber] ?? []
+            return Set(stored.map { $0.int64Value })
+        }
+        set {
+            UserDefaults.standard.set(newValue.map { NSNumber(value: $0) }, forKey: key)
+        }
+    }
+
+    public static func isException(_ peerId: PeerId) -> Bool {
+        return exceptions.contains(peerId.toInt64())
+    }
+
+    public static func setException(_ peerId: PeerId, _ value: Bool) {
+        var current = exceptions
+        if value {
+            current.insert(peerId.toInt64())
+        } else {
+            current.remove(peerId.toInt64())
+        }
+        exceptions = current
+    }
+}
