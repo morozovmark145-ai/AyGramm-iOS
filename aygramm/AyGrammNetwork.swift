@@ -8,6 +8,7 @@ import SwiftSignalKit
 // После отправки сообщения сервер считает автора «в сети». В режиме призрака через 1,5 с
 // AyGramm отправляет «не в сети», чтобы статус не держался.
 func ayGrammAfterSend(account: Account) {
+    AyGrammScreenTime.countSent()
     if !AyGrammSettings.hideOnline {
         return
     }
