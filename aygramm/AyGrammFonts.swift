@@ -3,7 +3,9 @@ import Foundation
 // Встроенный плагин «Шрифт сообщений»: исходящий текст сам меняет вид.
 // Стили 1–6 ставят форматирование Telegram на весь текст, оно работает для любых букв.
 // Остальные стили заменяют латиницу и цифры символами Unicode (жирный, готический, в кружках и т. д.)
-// и добавляют к каждой букве, включая кириллицу, подчёркивание, черту или сердечки.
+// и добавляют к каждой букве подчёркивание, черту или сердечки. Русские буквы заменяются похожими
+// латинскими буквами и цифрами того же начертания, а Г, Д, Л, П, Ф в жирных и курсивных стилях
+// становятся греческими Γ, Δ, Λ, Π, Φ того же начертания.
 // Ссылки, @имена, #теги и /команды не меняются.
 public struct AyGrammFontStyle {
     public let name: String
@@ -151,6 +153,46 @@ public enum AyGrammFonts {
         return sections
     }()
 
+    // Русская буква: похожая латиница или цифра и номер похожей греческой буквы в блоке математических символов.
+    // Без пары остаются Ж и Ц, а Г, Л, Ф остаются русскими там, где у начертания нет греческих букв.
+    static let cyrillicLookalikes: [Character: (String?, UInt32?)] = [
+        "А": ("A", nil), "Б": ("6", nil), "В": ("B", nil), "Г": (nil, 2), "Д": ("D", 3), "Е": ("E", nil), "Ё": ("E", nil),
+        "З": ("3", nil), "И": ("U", nil), "Й": ("U", nil), "К": ("K", nil), "Л": (nil, 10), "М": ("M", nil), "Н": ("H", nil),
+        "О": ("O", nil), "П": (nil, 15), "Р": ("P", nil), "С": ("C", nil), "Т": ("T", nil), "У": ("Y", nil), "Ф": (nil, 21),
+        "Х": ("X", nil), "Ч": ("4", nil), "Ш": ("W", nil), "Щ": ("W", nil), "Ъ": ("b", nil), "Ы": ("bI", nil), "Ь": ("b", nil),
+        "Э": ("3", nil), "Ю": ("IO", nil), "Я": ("R", nil),
+        "а": ("a", nil), "б": ("6", nil), "в": ("B", nil), "г": ("r", nil), "д": ("g", 29), "е": ("e", nil), "ё": ("e", nil),
+        "з": ("3", nil), "и": ("u", nil), "й": ("u", nil), "к": ("k", nil), "л": (nil, 36), "м": ("m", nil), "н": ("H", nil),
+        "о": ("o", nil), "п": ("n", 41), "р": ("p", nil), "с": ("c", nil), "т": ("T", nil), "у": ("y", nil), "ф": (nil, 47),
+        "х": ("x", nil), "ч": ("4", nil), "ш": ("w", nil), "щ": ("w", nil), "ъ": ("b", nil), "ы": ("bl", nil), "ь": ("b", nil),
+        "э": ("3", nil), "ю": ("io", nil), "я": ("R", nil),
+        "І": ("I", nil), "і": ("i", nil), "Ї": ("I", nil), "ї": ("i", nil), "Є": ("E", nil), "є": ("e", nil), "Ў": ("Y", nil), "ў": ("y", nil)
+    ]
+    // Первая греческая буква (Α) жирного, курсивного, жирного курсивного и двух жирных стилей без засечек.
+    static let greekStarts: [Int: UInt32] = [1: 0x1D6A8, 2: 0x1D6E2, 3: 0x1D71C, 10: 0x1D756, 12: 0x1D790]
+    // «Обычные буквы» и «Под кириллицу» русские буквы не меняют.
+    static let cyrillicSkipBases: Set<Int> = [0, 24]
+
+    static func cyrillic(_ character: Character, base: Int, table: [Character: String]) -> String? {
+        if cyrillicSkipBases.contains(base) {
+            return nil
+        }
+        guard let entry = cyrillicLookalikes[character] else {
+            return nil
+        }
+        if let offset = entry.1, let start = greekStarts[base], let scalar = Unicode.Scalar(start + offset) {
+            return String(Character(scalar))
+        }
+        guard let latin = entry.0 else {
+            return nil
+        }
+        var result = ""
+        for letter in latin {
+            result += table[letter] ?? String(letter)
+        }
+        return result
+    }
+
     // Таблицы замены строятся один раз при первом обращении.
     static let tables: [[Character: String]] = baseTables.map { row -> [Character: String] in
         var table: [Character: String] = [:]
@@ -215,7 +257,7 @@ public enum AyGrammFonts {
         let table = tables[style.base]
         var characters: [String] = []
         for character in word {
-            var value = table[character] ?? String(character)
+            var value = table[character] ?? cyrillic(character, base: style.base, table: table) ?? String(character)
             if character.isLetter || character.isNumber {
                 value += style.mark
             }
