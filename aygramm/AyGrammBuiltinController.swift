@@ -10,7 +10,7 @@ import PresentationDataUtils
 
 // Встроенные плагины AyGramm: функции, которые работают внутри приложения и включаются переключателем.
 // Плагины из каталога и свои плагины меняют только текст исходящих сообщений, а встроенные могут больше.
-// Экран разбит на 5 разделов: связь, аккаунты, профиль, сообщения, инструменты.
+// Разделы экрана: связь, аккаунты, профиль, сообщения, чаты, голос, инструменты, автоответ, отправка.
 
 private final class AyGrammBuiltinArguments {
     let toggle: (String, Bool) -> Void
@@ -23,9 +23,17 @@ private final class AyGrammBuiltinArguments {
     let openCrashLog: () -> Void
     let exportBackup: () -> Void
     let restoreBackup: () -> Void
+    let openAutoReply: () -> Void
+    let chooseBomb: () -> Void
+    let chooseLanguage: () -> Void
+    let setPassword: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void, openFilters: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, openDecorations: @escaping () -> Void, openProfiles: @escaping () -> Void, openLog: @escaping () -> Void, openFonts: @escaping () -> Void, openVoice: @escaping () -> Void, openCrashLog: @escaping () -> Void, exportBackup: @escaping () -> Void, restoreBackup: @escaping () -> Void, openFilters: @escaping () -> Void, openAutoReply: @escaping () -> Void, chooseBomb: @escaping () -> Void, chooseLanguage: @escaping () -> Void, setPassword: @escaping () -> Void) {
         self.toggle = toggle
+        self.openAutoReply = openAutoReply
+        self.chooseBomb = chooseBomb
+        self.chooseLanguage = chooseLanguage
+        self.setPassword = setPassword
         self.openFonts = openFonts
         self.openVoice = openVoice
         self.openFilters = openFilters
@@ -51,6 +59,10 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
     case crashLog(Bool)
     case backupExport
     case backupRestore
+    case autoReply(String)
+    case bombSeconds(String)
+    case translateLanguage(String)
+    case cipherPassword(Bool)
     case footer
 
     var section: ItemListSectionId {
@@ -81,8 +93,16 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return 713
         case .backupRestore:
             return 714
+        case .autoReply:
+            return 810
+        case .bombSeconds:
+            return 911
+        case .translateLanguage:
+            return 913
+        case .cipherPassword:
+            return 915
         case .footer:
-            return 999
+            return 1999
         }
     }
 
@@ -135,6 +155,22 @@ private enum AyGrammBuiltinEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("arrow.counterclockwise", AyGrammColor.green), title: "Восстановить из буфера обмена", label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.restoreBackup()
             })
+        case let .autoReply(status):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("bubble.left.and.bubble.right.fill", AyGrammColor.green), title: "Автоответ", label: status, sectionId: self.section, style: .blocks, action: {
+                arguments.openAutoReply()
+            })
+        case let .bombSeconds(title):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("timer", AyGrammColor.orange), title: "Время бомбы", label: title, sectionId: self.section, style: .blocks, action: {
+                arguments.chooseBomb()
+            })
+        case let .translateLanguage(name):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("character.bubble.fill", AyGrammColor.blue), title: "Язык перевода", label: name, sectionId: self.section, style: .blocks, action: {
+                arguments.chooseLanguage()
+            })
+        case let .cipherPassword(isSet):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("key.fill", AyGrammColor.yellow), title: "Пароль шифровки", label: isSet ? "задан" : "не задан", sectionId: self.section, style: .blocks, action: {
+                arguments.setPassword()
+            })
         case .footer:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Встроенные плагины работают внутри AyGramm и ничего не отправляют автору. Новый лимит аккаунтов действует при следующем добавлении аккаунта."), sectionId: self.section)
         }
@@ -155,6 +191,13 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
     let fontPromise = ValuePromise<Int>(AyGrammFonts.selectedIndex, ignoreRepeated: true)
     let voicePromise = ValuePromise<Int>(AyGrammVoice.selectedIndex, ignoreRepeated: true)
     let crashPromise = ValuePromise<Bool>(AyGrammCrashLog.lastReport != nil, ignoreRepeated: true)
+    // Подписи автоответа, бомбы, языка и пароля перерисовываются после каждого изменения.
+    let extraPromise = ValuePromise<Int>(0, ignoreRepeated: false)
+    var extraVersion = 0
+    let refreshExtra: () -> Void = {
+        extraVersion += 1
+        extraPromise.set(extraVersion)
+    }
     var pushControllerImpl: ((ViewController) -> Void)?
     var presentControllerImpl: ((ViewController) -> Void)?
     let showMessage: (String) -> Void = { text in
@@ -215,6 +258,46 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         showMessage("Настройки, плагины и украшения восстановлены.")
     }, openFilters: {
         pushControllerImpl?(ayGrammFiltersController(context: context))
+    }, openAutoReply: {
+        pushControllerImpl?(ayGrammAutoReplyController(context: context, changed: {
+            valuesPromise.set(ayGrammBuiltinValues())
+            refreshExtra()
+        }))
+    }, chooseBomb: {
+        let options = AyGrammBomb.options
+        pushControllerImpl?(ayGrammOptionsController(context: context, title: "Время бомбы", header: "УДАЛИТЬ У ВСЕХ ЧЕРЕЗ", options: options.map { AyGrammBomb.title($0) }, selected: options.firstIndex(of: AyGrammBomb.seconds) ?? 2, footer: "Таймер идёт с момента отправки. Если AyGramm закрыт, сообщение удалится при следующем запуске. Клиенты с сохранением удалённых сообщений его сохранят.", select: { index in
+            AyGrammBomb.seconds = options[index]
+            refreshExtra()
+        }))
+    }, chooseLanguage: {
+        let languages = AyGrammTranslate.languages
+        let titles: [String] = languages.map { item -> String in
+            return item.1.prefix(1).uppercased() + item.1.dropFirst()
+        }
+        pushControllerImpl?(ayGrammOptionsController(context: context, title: "Язык перевода", header: "ПЕРЕВОДИТЬ НА", options: titles, selected: languages.firstIndex(where: { item in item.0 == AyGrammTranslate.language }) ?? 0, footer: "Перевод делает переводчик Telegram. Форматирование сохраняется.", select: { index in
+            AyGrammTranslate.language = languages[index].0
+            refreshExtra()
+        }))
+    }, setPassword: {
+        let alert = UIAlertController(title: "Пароль шифровки", message: "Сообщения расшифрует только AyGramm с тем же паролем. Сообщите пароль друзьям лично, не в этом же чате.", preferredStyle: .alert)
+        alert.addTextField(configurationHandler: { field in
+            field.text = AyGrammCipher.password
+            field.placeholder = "Пароль"
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .none
+        })
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+        if !AyGrammCipher.password.isEmpty {
+            alert.addAction(UIAlertAction(title: "Удалить пароль", style: .destructive, handler: { _ in
+                AyGrammCipher.password = ""
+                refreshExtra()
+            }))
+        }
+        alert.addAction(UIAlertAction(title: "Сохранить", style: .default, handler: { [weak alert] _ in
+            AyGrammCipher.password = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            refreshExtra()
+        }))
+        context.sharedContext.mainWindow?.presentNative(alert)
     })
 
     let signal = combineLatest(queue: .mainQueue(),
@@ -223,9 +306,10 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         logCountPromise.get(),
         fontPromise.get(),
         voicePromise.get(),
-        crashPromise.get()
+        crashPromise.get(),
+        extraPromise.get()
     )
-    |> map { presentationData, values, logCount, fontIndex, voiceIndex, hasCrash -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, values, logCount, fontIndex, voiceIndex, hasCrash, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         func value(_ key: String) -> Bool {
             return values[key] ?? AyGrammSettings.storedValue(key)
         }
@@ -240,6 +324,8 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.decorations)
         entries.append(.toggle(312, AyGrammSettings.showIdKey, "ID в профиле", "ID пользователя в Telegram. Нажатие копирует его.", value(AyGrammSettings.showIdKey)))
         entries.append(.toggle(313, AyGrammSettings.streamerKey, "Режим стримера", "Номера телефонов скрыты в профилях и в настройках.", value(AyGrammSettings.streamerKey)))
+        entries.append(.toggle(314, AyGrammSettings.accountAgeKey, "Дата регистрации", "Примерная дата создания аккаунта в профиле, по номеру ID.", value(AyGrammSettings.accountAgeKey)))
+        entries.append(.toggle(315, AyGrammSettings.mutualKey, "Взаимный контакт", "В профиле контакта видно, сохранил ли он вас в ответ.", value(AyGrammSettings.mutualKey)))
         entries.append(.sectionHeader(400, "СООБЩЕНИЯ"))
         entries.append(.toggle(410, AyGrammSettings.tokensKey, "Подстановки", "{дата}, {время} и {день} заменяются при отправке.", value(AyGrammSettings.tokensKey)))
         entries.append(.font(AyGrammFonts.styles[fontIndex].name))
@@ -250,14 +336,25 @@ func ayGrammBuiltinController(context: AccountContext) -> ViewController {
         entries.append(.toggle(510, AyGrammSettings.filtersKey, "Фильтры в группах", "Скрывает сообщения со словами из списка и сообщения выбранных людей.", value(AyGrammSettings.filtersKey)))
         entries.append(.filters(AyGrammFilters.words.count + AyGrammFilters.authors.count))
         entries.append(.toggle(512, AyGrammSettings.exportKey, "Экспорт чата", "Пункт в меню сообщения: скачанные сообщения чата в файл .txt. Чаты с запретом копирования не экспортируются.", value(AyGrammSettings.exportKey)))
+        entries.append(.toggle(513, AyGrammSettings.chatToolsKey, "Меню AyGramm в сообщении", "Статистика чата, первое сообщение, скриншот, кружок из галереи, «Стереть мои сообщения».", value(AyGrammSettings.chatToolsKey)))
         entries.append(.sectionHeader(600, "ГОЛОС"))
         entries.append(.voice(AyGrammVoice.effects[voiceIndex].0))
+        entries.append(.toggle(611, AyGrammSettings.voiceSendKey, "Отправить голосом", "Долгое нажатие на «Отправить»: голос iOS читает текст, собеседник получает голосовое с эффектом выше.", value(AyGrammSettings.voiceSendKey)))
         entries.append(.sectionHeader(700, "ИНСТРУМЕНТЫ"))
         entries.append(.profiles)
         entries.append(.log(logCount))
         entries.append(.crashLog(hasCrash))
         entries.append(.backupExport)
         entries.append(.backupRestore)
+        entries.append(.sectionHeader(800, "АВТООТВЕТ"))
+        entries.append(.autoReply(AyGrammAutoReply.statusTitle))
+        entries.append(.sectionHeader(900, "ОТПРАВКА"))
+        entries.append(.toggle(910, AyGrammSettings.bombKey, "Сообщение-бомба", "Долгое нажатие на «Отправить»: сообщение удалится у всех через выбранное время.", value(AyGrammSettings.bombKey)))
+        entries.append(.bombSeconds(AyGrammBomb.secondsTitle))
+        entries.append(.toggle(912, AyGrammSettings.translateKey, "Перевод при отправке", "Долгое нажатие на «Отправить»: текст уходит на выбранном языке.", value(AyGrammSettings.translateKey)))
+        entries.append(.translateLanguage(AyGrammTranslate.languageName))
+        entries.append(.toggle(914, AyGrammSettings.cipherKey, "Шифровка", "Долгое нажатие на «Отправить»: текст уходит зашифрованным, прочитает только AyGramm с тем же паролем.", value(AyGrammSettings.cipherKey)))
+        entries.append(.cipherPassword(!AyGrammCipher.password.isEmpty))
         entries.append(.footer)
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Встроенные плагины"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
@@ -487,7 +584,7 @@ private enum AyGrammFontsEntry: ItemListNodeEntry {
                 select(Int(index))
             })
         case .footer:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Шрифт применяется к каждому отправленному сообщению. Начертания Unicode меняют латиницу и цифры, черты, точки и сердечки добавляются и к русским буквам. Ссылки, @имена, #теги и /команды не меняются. Сообщения с вашим форматированием уходят как есть."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Шрифт применяется к каждому отправленному сообщению. Все начертания работают и с русским текстом: русские буквы заменяются похожими буквами того же начертания, в жирных и курсивных стилях Г, Д, Л, П, Ф становятся греческими. Черты, точки и сердечки добавляются ко всем буквам. Ссылки, @имена, #теги и /команды не меняются. Сообщения с вашим форматированием уходят как есть."), sectionId: self.section)
         }
     }
 }
@@ -731,6 +828,319 @@ private func ayGrammFiltersController(context: AccountContext) -> ViewController
     let controller = ItemListController(context: context, state: signal)
     presentControllerImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
+    }
+    return controller
+}
+
+// MARK: - Выбор из списка
+
+private enum AyGrammOptionEntry: ItemListNodeEntry {
+    case header(String)
+    case option(Int32, String, Bool)
+    case footer(String)
+
+    var section: ItemListSectionId {
+        return 0
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case .header:
+            return 0
+        case let .option(index, _, _):
+            return 1 + index
+        case .footer:
+            return 100000
+        }
+    }
+
+    static func <(lhs: AyGrammOptionEntry, rhs: AyGrammOptionEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let select = arguments as! (Int) -> Void
+        switch self {
+        case let .header(text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .option(index, title, isSelected):
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: title, style: .right, checked: isSelected, zeroSeparatorInsets: false, sectionId: self.section, action: {
+                select(Int(index))
+            })
+        case let .footer(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        }
+    }
+}
+
+// Экран с галочками: выбор одного варианта из списка, выбор сохраняется сразу.
+func ayGrammOptionsController(context: AccountContext, title: String, header: String, options: [String], selected: Int, footer: String, select: @escaping (Int) -> Void) -> ViewController {
+    let selectedPromise = ValuePromise<Int>(selected, ignoreRepeated: true)
+    let choose: (Int) -> Void = { index in
+        selectedPromise.set(index)
+        select(index)
+    }
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        selectedPromise.get()
+    )
+    |> map { presentationData, current -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        var entries: [AyGrammOptionEntry] = [.header(header)]
+        for (index, option) in options.enumerated() {
+            entries.append(.option(Int32(index), option, index == current))
+        }
+        if !footer.isEmpty {
+            entries.append(.footer(footer))
+        }
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, choose))
+    }
+    return ItemListController(context: context, state: signal)
+}
+
+// MARK: - Автоответ
+
+private final class AyGrammAutoReplyArguments {
+    let toggle: (String, Bool) -> Void
+    let action: (Int) -> Void
+    let removeRule: (String) -> Void
+
+    init(toggle: @escaping (String, Bool) -> Void, action: @escaping (Int) -> Void, removeRule: @escaping (String) -> Void) {
+        self.toggle = toggle
+        self.action = action
+        self.removeRule = removeRule
+    }
+}
+
+// Номера действий для строк со стрелкой.
+private enum AyGrammAutoReplyAction {
+    static let text = 0
+    static let schedule = 1
+    static let audience = 2
+    static let cooldown = 3
+    static let delay = 4
+    static let excluded = 5
+    static let addRule = 6
+    static let clearLog = 7
+}
+
+// stableId / 100 = номер раздела.
+private enum AyGrammAutoReplyEntry: ItemListNodeEntry {
+    case header(Int32, String)
+    case toggle(Int32, String, String, String, Bool)
+    case action(Int32, String, String, String, UInt32, Int)
+    case rule(Int32, String, String)
+    case info(Int32, String)
+
+    var section: ItemListSectionId {
+        return self.stableId / 100
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case let .header(id, _):
+            return id
+        case let .toggle(id, _, _, _, _):
+            return id
+        case let .action(id, _, _, _, _, _):
+            return id
+        case let .rule(id, _, _):
+            return id
+        case let .info(id, _):
+            return id
+        }
+    }
+
+    static func <(lhs: AyGrammAutoReplyEntry, rhs: AyGrammAutoReplyEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let arguments = arguments as! AyGrammAutoReplyArguments
+        switch self {
+        case let .header(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .toggle(_, key, title, text, value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammKeyIcon(key), title: title, text: text, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggle(key, value)
+            })
+        case let .action(_, title, label, symbol, color, kind):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon(symbol, color), title: title, label: label, sectionId: self.section, style: .blocks, action: {
+                arguments.action(kind)
+            })
+        case let .rule(_, keyword, answer):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: ayGrammIcon("text.bubble.fill", AyGrammColor.teal), title: "«\(keyword)»", label: answer, sectionId: self.section, style: .blocks, action: {
+                arguments.removeRule(keyword)
+            })
+        case let .info(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        }
+    }
+}
+
+func ayGrammAutoReplyController(context: AccountContext, changed: @escaping () -> Void) -> ViewController {
+    let versionPromise = ValuePromise<Int>(0, ignoreRepeated: false)
+    var version = 0
+    let refresh: () -> Void = {
+        version += 1
+        versionPromise.set(version)
+        changed()
+    }
+    var pushControllerImpl: ((ViewController) -> Void)?
+    let presentAlert: (UIAlertController) -> Void = { alert in
+        context.sharedContext.mainWindow?.presentNative(alert)
+    }
+
+    let arguments = AyGrammAutoReplyArguments(toggle: { key, value in
+        AyGrammSettings.setValue(key, value)
+        refresh()
+    }, action: { kind in
+        switch kind {
+        case AyGrammAutoReplyAction.text:
+            let alert = UIAlertController(title: "Текст автоответа", message: "Подстановки: {имя}, {время}, {дата}. Пустой текст вернёт стандартный.", preferredStyle: .alert)
+            alert.addTextField(configurationHandler: { field in
+                field.text = AyGrammAutoReply.text
+                field.clearButtonMode = .whileEditing
+            })
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+            alert.addAction(UIAlertAction(title: "Сохранить", style: .default, handler: { [weak alert] _ in
+                let value = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                AyGrammAutoReply.text = value.isEmpty ? AyGrammAutoReply.defaultText : value
+                refresh()
+            }))
+            presentAlert(alert)
+        case AyGrammAutoReplyAction.schedule:
+            let alert = UIAlertController(title: "Время автоответа", message: "Часы от 0 до 23. Например, с 23 до 8: автоответ работает ночью.", preferredStyle: .alert)
+            alert.addTextField(configurationHandler: { field in
+                field.text = "\(AyGrammAutoReply.fromHour)"
+                field.placeholder = "С какого часа"
+                field.keyboardType = .numberPad
+            })
+            alert.addTextField(configurationHandler: { field in
+                field.text = "\(AyGrammAutoReply.toHour)"
+                field.placeholder = "До какого часа"
+                field.keyboardType = .numberPad
+            })
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+            alert.addAction(UIAlertAction(title: "Сохранить", style: .default, handler: { [weak alert] _ in
+                let fields = alert?.textFields ?? []
+                if fields.count == 2, let from = Int(fields[0].text ?? ""), let to = Int(fields[1].text ?? ""), from >= 0 && from < 24 && to >= 0 && to < 24 {
+                    AyGrammAutoReply.fromHour = from
+                    AyGrammAutoReply.toHour = to
+                    AyGrammSettings.setValue(AyGrammSettings.autoReplyScheduleKey, true)
+                }
+                refresh()
+            }))
+            presentAlert(alert)
+        case AyGrammAutoReplyAction.audience:
+            pushControllerImpl?(ayGrammOptionsController(context: context, title: "Кому отвечать", header: "АВТООТВЕТ ПОЛУЧАТ", options: AyGrammAutoReply.audiences, selected: AyGrammAutoReply.audience, footer: "Контакты: люди из вашей телефонной книги Telegram. Незнакомые: все остальные.", select: { index in
+                AyGrammAutoReply.audience = index
+                refresh()
+            }))
+        case AyGrammAutoReplyAction.cooldown:
+            let options = AyGrammAutoReply.cooldowns
+            pushControllerImpl?(ayGrammOptionsController(context: context, title: "Как часто", header: "ОДНОМУ ЧЕЛОВЕКУ НЕ ЧАЩЕ", options: options.map { $0.1 }, selected: options.firstIndex(where: { $0.0 == AyGrammAutoReply.cooldownMinutes }) ?? 1, footer: "Если человек пишет много сообщений подряд, автоответ уходит один раз за выбранный срок. Умные ответы на слова приходят не чаще раза в 2 минуты.", select: { index in
+                AyGrammAutoReply.cooldownMinutes = options[index].0
+                refresh()
+            }))
+        case AyGrammAutoReplyAction.delay:
+            let options = AyGrammAutoReply.delays
+            pushControllerImpl?(ayGrammOptionsController(context: context, title: "Задержка", header: "ОТВЕЧАТЬ", options: options.map { $0.1 }, selected: options.firstIndex(where: { $0.0 == AyGrammAutoReply.delaySeconds }) ?? 0, footer: "Если за это время вы ответите сами или откроете чат, автоответ не уйдёт.", select: { index in
+                AyGrammAutoReply.delaySeconds = options[index].0
+                refresh()
+            }))
+        case AyGrammAutoReplyAction.excluded:
+            let count = AyGrammAutoReply.excluded.count
+            let alert = UIAlertController(title: "Исключения", message: count == 0 ? "Исключений нет. Чтобы автоответ не отвечал человеку, нажмите на его сообщение и выберите AyGramm → «Автоответ: не отвечать ему»." : "Автоответ не отвечает людям: \(count). Добавить человека: нажмите на его сообщение и выберите AyGramm → «Автоответ: не отвечать ему».", preferredStyle: .alert)
+            if count > 0 {
+                alert.addAction(UIAlertAction(title: "Очистить список", style: .destructive, handler: { _ in
+                    AyGrammAutoReply.excluded = Set()
+                    refresh()
+                }))
+            }
+            alert.addAction(UIAlertAction(title: "OK", style: .cancel, handler: nil))
+            presentAlert(alert)
+        case AyGrammAutoReplyAction.addRule:
+            let alert = UIAlertController(title: "Умный ответ", message: "Если сообщение содержит слово, автоответ отправит ваш ответ. Пример: слово «цена», ответ «Прайс в закреплённом сообщении».", preferredStyle: .alert)
+            alert.addTextField(configurationHandler: { field in
+                field.placeholder = "Слово или фраза"
+            })
+            alert.addTextField(configurationHandler: { field in
+                field.placeholder = "Ответ"
+            })
+            alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+            alert.addAction(UIAlertAction(title: "Добавить", style: .default, handler: { [weak alert] _ in
+                let fields = alert?.textFields ?? []
+                if fields.count == 2 {
+                    let _ = AyGrammAutoReply.addRule(keyword: fields[0].text ?? "", answer: fields[1].text ?? "")
+                }
+                refresh()
+            }))
+            presentAlert(alert)
+        case AyGrammAutoReplyAction.clearLog:
+            AyGrammAutoReply.clearLog()
+            refresh()
+        default:
+            break
+        }
+    }, removeRule: { keyword in
+        let alert = UIAlertController(title: "Удалить правило «\(keyword)»?", message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: "Удалить", style: .destructive, handler: { _ in
+            AyGrammAutoReply.removeRule(keyword: keyword)
+            refresh()
+        }))
+        presentAlert(alert)
+    })
+
+    let signal = combineLatest(queue: .mainQueue(),
+        context.sharedContext.presentationData,
+        versionPromise.get()
+    )
+    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        func value(_ key: String) -> Bool {
+            return AyGrammSettings.storedValue(key)
+        }
+        var entries: [AyGrammAutoReplyEntry] = []
+        entries.append(.header(0, "АВТООТВЕТ"))
+        entries.append(.toggle(1, AyGrammSettings.autoReplyKey, "Автоответ", "Отвечает людям в личных чатах, пока вас нет. Сейчас: \(AyGrammAutoReply.statusTitle).", value(AyGrammSettings.autoReplyKey)))
+        entries.append(.action(2, "Текст ответа", String(AyGrammAutoReply.text.prefix(24)), "text.quote", AyGrammColor.blue, AyGrammAutoReplyAction.text))
+        entries.append(.toggle(3, AyGrammSettings.autoReplyMarkKey, "Метка 🤖", "Собеседник видит, что ответ автоматический. На сообщения с 🤖 автоответ не отвечает, поэтому два автоответа не спорят друг с другом.", value(AyGrammSettings.autoReplyMarkKey)))
+        entries.append(.header(100, "КОГДА"))
+        entries.append(.toggle(101, AyGrammSettings.autoReplyBackgroundKey, "Только когда AyGramm свёрнут", "Пока приложение открыто, автоответ молчит.", value(AyGrammSettings.autoReplyBackgroundKey)))
+        entries.append(.toggle(102, AyGrammSettings.autoReplyScheduleKey, "По расписанию", "Автоответ работает только в выбранные часы.", value(AyGrammSettings.autoReplyScheduleKey)))
+        entries.append(.action(103, "Часы работы", AyGrammAutoReply.scheduleTitle, "clock.fill", AyGrammColor.orange, AyGrammAutoReplyAction.schedule))
+        entries.append(.header(200, "КОМУ И КАК ЧАСТО"))
+        entries.append(.action(201, "Кому отвечать", AyGrammAutoReply.audiences[AyGrammAutoReply.audience].lowercased(), "person.2.fill", AyGrammColor.indigo, AyGrammAutoReplyAction.audience))
+        entries.append(.action(202, "Одному человеку", AyGrammAutoReply.cooldownTitle, "hourglass", AyGrammColor.purple, AyGrammAutoReplyAction.cooldown))
+        entries.append(.action(203, "Задержка", AyGrammAutoReply.delayTitle, "timer", AyGrammColor.teal, AyGrammAutoReplyAction.delay))
+        entries.append(.action(204, "Исключения", "\(AyGrammAutoReply.excluded.count)", "person.fill.xmark", AyGrammColor.red, AyGrammAutoReplyAction.excluded))
+        entries.append(.header(300, "УМНЫЕ ОТВЕТЫ"))
+        let rules = AyGrammAutoReply.rules
+        for (index, rule) in rules.prefix(90).enumerated() {
+            entries.append(.rule(301 + Int32(index), rule.keyword, rule.answer))
+        }
+        entries.append(.action(398, "Добавить правило", "", "plus", AyGrammColor.green, AyGrammAutoReplyAction.addRule))
+        entries.append(.info(399, rules.isEmpty ? "Ответ на слово в сообщении, например на «цена» или «адрес». Правила проверяются раньше основного текста. Нажмите на правило, чтобы удалить его." : "Нажмите на правило, чтобы удалить его."))
+        entries.append(.header(400, "ЖУРНАЛ"))
+        let log = AyGrammAutoReply.log
+        entries.append(.info(401, "Отправлено автоответов: \(AyGrammAutoReply.sentCount)."))
+        for (index, line) in log.prefix(20).enumerated() {
+            entries.append(.info(402 + Int32(index), line))
+        }
+        if !log.isEmpty {
+            entries.append(.action(498, "Очистить журнал", "", "trash.fill", AyGrammColor.red, AyGrammAutoReplyAction.clearLog))
+        }
+        entries.append(.info(500, "Автоответ работает, пока AyGramm запущен. Чтобы он отвечал в свёрнутом приложении, включите «Звонки в фоне». Он отвечает только людям в личных чатах, не ботам, на сообщения не старше 10 минут и не больше 30 раз в час. Ответ уходит цитатой на сообщение собеседника, после него Telegram может показать чат прочитанным."))
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Автоответ"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        return (controllerState, (listState, arguments))
+    }
+
+    let controller = ItemListController(context: context, state: signal)
+    pushControllerImpl = { [weak controller] c in
+        controller?.push(c)
     }
     return controller
 }
