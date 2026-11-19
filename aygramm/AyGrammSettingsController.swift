@@ -197,7 +197,7 @@ private enum AyGrammSettingsEntry: ItemListNodeEntry {
                 arguments.toggle(key, value)
             })
         case .ghostFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("«Призрак целиком» включает и выключает все 4 пункта сразу. Отметить чат прочитанным: зажмите сообщение → «Отправить прочтение». Ответ в чате сам отмечает прочитанным."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("«Призрак целиком» включает и выключает все 4 пункта сразу. Чат без призрака: зажмите сообщение → AyGramm → «Обычный режим в этом чате». Отметить чат прочитанным: зажмите сообщение → «Отправить прочтение». Ответ в чате сам отмечает прочитанным."), sectionId: self.section)
         case .categoriesHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ФУНКЦИИ", sectionId: self.section)
         case let .category(_, title, label, symbol, color, sections):
@@ -297,8 +297,6 @@ private func ayGrammSettingsEntries(state: AyGrammSettingsState, downloads: Stri
     return entries
 }
 
-// Что нового: список функций последних сборок, открывается из шапки меню.
-private let ayGrammWhatsNewText = "• Автоответ: расписание, кому отвечать, умные ответы по словам, журнал.\n• Все 213 шрифтов пишут и русскими буквами, слово меняет шрифт сразу при наборе.\n• 21 эффект голоса, при выборе звучит образец.\n• Меню «Отправить»: бомба, перевод, шифровка, отправка голосом.\n• Меню сообщения → AyGramm: статистика чата, скриншот, кружок из галереи.\n• Профиль: дата регистрации и взаимный контакт.\n• Новое меню AyGramm и логотип вместо лампочки."
 
 func ayGrammSettingsController(context: AccountContext, openChannel: @escaping () -> Void) -> ViewController {
     let statePromise = ValuePromise(AyGrammSettingsState.current(), ignoreRepeated: true)
@@ -337,7 +335,7 @@ func ayGrammSettingsController(context: AccountContext, openChannel: @escaping (
         },
         openWhatsNew: {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            presentControllerImpl?(textAlertController(context: context, title: "Что нового в AyGramm", text: ayGrammWhatsNewText, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
+            presentControllerImpl?(textAlertController(context: context, title: "Что нового в AyGramm", text: AyGrammWhatsNew.text, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]))
         },
         openCategory: { title, sections in
             pushControllerImpl?(ayGrammBuiltinController(context: context, sections: sections.isEmpty ? nil : Set(sections), title: title, changed: {
